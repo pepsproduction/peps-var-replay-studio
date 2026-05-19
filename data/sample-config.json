@@ -1,0 +1,23 @@
+{
+  "project": "Peps VAR Replay Studio",
+  "version": "1.0.0",
+  "defaultMode": "control",
+  "theme": {
+    "primary": "#ff8a1c",
+    "secondary": "#ffb347",
+    "accent": "#62d6ff",
+    "background": "#05070b"
+  },
+  "playback": {
+    "speedMin": 0.25,
+    "speedMax": 2.0,
+    "zoomMin": 1.0,
+    "zoomMax": 3.0
+  },
+  "obs": {
+    "controlQuery": "?mode=control",
+    "screenQuery": "?mode=screen",
+    "recommendedWidth": 1920,
+    "recommendedHeight": 1080
+  }
+}
