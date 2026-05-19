@@ -5,7 +5,17 @@
   const CHANNEL = 'peps-var-replay-studio-v1-1';
   const bc = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
   const params = new URLSearchParams(location.search);
-  const isScreen = params.get('mode') === 'screen';
+  const pageMode = params.get('mode') || 'control';
+  const isHighlightScreen = pageMode === 'highlight-screen';
+  const isVarScreen = pageMode === 'screen';
+  const isScreen = isHighlightScreen;
+  const isControl = !isHighlightScreen && !isVarScreen;
+
+  if (isHighlightScreen) {
+    document.body.classList.remove('is-control');
+    document.body.classList.add('is-screen', 'is-highlight-screen');
+    document.body.dataset.replayMode = 'highlight-source';
+  }
 
   const els = {
     tabVar: $('#tabVarReplay'),
@@ -70,11 +80,62 @@
 
   function post(type, payload = {}) {
     if (!bc) return;
-    bc.postMessage({ type, payload, source: isScreen ? 'highlight-screen' : 'highlight-control', at: Date.now() });
+    bc.postMessage({
+      type,
+      payload,
+      source: isHighlightScreen ? 'highlight-screen' : 'highlight-control',
+      at: Date.now()
+    });
+  }
+
+  function highlightSourceUrl() {
+    const url = new URL(location.href);
+    url.pathname = url.pathname.replace(/VAR_Replay_V1\.0\.html$/i, 'index.html');
+    url.searchParams.set('mode', 'highlight-screen');
+    return url.toString();
+  }
+
+  function injectHighlightSourceLink() {
+    if (!isControl || $('#linkInputHighlight')) return;
+    const modal = $('#modalLinks .modal');
+    if (!modal) return;
+
+    const block = document.createElement('div');
+    block.className = 'highlight-source-link-block';
+    block.innerHTML = `
+      <hr />
+      <p>Highlight Source Link สำหรับ OBS Browser Source แยกจาก VAR</p>
+      <div class="copy-group">
+        <input id="linkInputHighlight" class="copy-input" type="text" readonly />
+        <button id="btnCopyHighlight" type="button">Copy</button>
+      </div>
+      <div class="highlight-source-note">ใช้ลิงก์นี้สำหรับหมวด Highlight Replay เท่านั้น</div>
+    `;
+    modal.appendChild(block);
+
+    const input = $('#linkInputHighlight');
+    const button = $('#btnCopyHighlight');
+    if (input) input.value = highlightSourceUrl();
+    button?.addEventListener('click', async () => {
+      const value = input?.value || highlightSourceUrl();
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch {
+        input?.focus();
+        input?.select();
+        document.execCommand('copy');
+      }
+      const msg = $('#copyMsg');
+      if (msg) {
+        msg.textContent = 'Copied Highlight Source!';
+        msg.classList.add('show');
+        setTimeout(() => msg.classList.remove('show'), 1500);
+      }
+    });
   }
 
   function setMode(mode) {
-    if (isScreen) return;
+    if (!isControl) return;
     state.mode = mode === 'highlight' ? 'highlight' : 'var';
     document.body.dataset.replayMode = state.mode;
     els.tabVar?.classList.toggle('active', state.mode === 'var');
@@ -97,7 +158,11 @@
     els.video.src = objectUrl;
     els.video.load();
     els.video.playbackRate = state.speed;
-    post('highlight:clip', { clip: { name: clip.name, type: clip.type, file: clip.file }, speed: state.speed, playing: autoplay });
+    post('highlight:clip', {
+      clip: { name: clip.name, type: clip.type, file: clip.file },
+      speed: state.speed,
+      playing: autoplay
+    });
     render();
     if (autoplay) play();
   }
@@ -256,7 +321,7 @@
   }
 
   function render() {
-    if (isScreen) return;
+    if (!isControl) return;
     els.tabVar?.classList.toggle('active', state.mode === 'var');
     els.tabHighlight?.classList.toggle('active', state.mode === 'highlight');
     if (els.now) els.now.textContent = state.currentIndex >= 0 && state.clips[state.currentIndex] ? state.clips[state.currentIndex].name : 'ยังไม่มีคลิป';
@@ -271,10 +336,13 @@
       button.classList.toggle('active', Math.abs(Number(button.dataset.highlightSpeed) - state.speed) < 0.001);
     });
     renderPlaylist();
+    const linkInput = $('#linkInputHighlight');
+    if (linkInput) linkInput.value = highlightSourceUrl();
   }
 
   function setupControlEvents() {
-    if (isScreen) return;
+    if (!isControl) return;
+    injectHighlightSourceLink();
     els.tabVar?.addEventListener('click', () => setMode('var'));
     els.tabHighlight?.addEventListener('click', () => setMode('highlight'));
     els.dropZone?.addEventListener('click', () => els.fileInput?.click());
@@ -321,7 +389,7 @@
   }
 
   function loadScreenClip(file, meta = {}, autoplay = false) {
-    if (!isScreen || !els.screenVideo || !file) return;
+    if (!isHighlightScreen || !els.screenVideo || !file) return;
     if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
     screenObjectUrl = URL.createObjectURL(file);
     els.screenVideo.pause();
@@ -330,17 +398,18 @@
     els.screenVideo.playbackRate = state.speed;
     setScreenStatus(`Highlight: ${meta.name || file.name || 'clip'}`);
     if (els.videoWrapper) els.videoWrapper.classList.toggle('hide-status', false);
-    if (autoplay) setTimeout(() => els.screenVideo.play().catch(() => setScreenStatus('Click Screen once to allow playback')), 80);
+    if (autoplay) setTimeout(() => els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback')), 80);
   }
 
   function setupScreenEvents() {
-    if (!isScreen || !bc) return;
+    if (!isHighlightScreen || !bc) return;
+    setScreenStatus('Highlight Source Ready');
     bc.addEventListener('message', (event) => {
       const msg = event.data || {};
       if (!msg.type || msg.source === 'highlight-screen') return;
       const payload = msg.payload || {};
       if (msg.type === 'highlight:mode') {
-        setScreenStatus(payload.mode === 'highlight' ? 'Highlight Replay Ready' : 'VAR Replay Ready');
+        setScreenStatus(payload.mode === 'highlight' ? 'Highlight Replay Ready' : 'Highlight Source Standby');
       }
       if (msg.type === 'highlight:clip' && payload.clip?.file) {
         state.speed = Number(payload.speed) || state.speed;
@@ -350,7 +419,7 @@
         state.speed = Number(payload.speed) || state.speed;
         if (els.screenVideo) {
           els.screenVideo.playbackRate = state.speed;
-          els.screenVideo.play().catch(() => setScreenStatus('Click Screen once to allow playback'));
+          els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
         }
       }
       if (msg.type === 'highlight:pause') els.screenVideo?.pause();
