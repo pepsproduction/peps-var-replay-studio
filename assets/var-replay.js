@@ -11,9 +11,15 @@
   const CLIP_ID = 'active-clip';
   const bc = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
 
+  injectControlPreviewFixCss();
+  document.body.classList.toggle('is-screen', mode === 'screen');
+  document.body.classList.toggle('is-control', mode !== 'screen');
+  if (mode === 'control') ensureControlVideo();
+
   const els = {
     fileInput: $('#fileInput'),
     dropZone: $('#dropZone'),
+    dropTitle: $('#dropTitle'),
     dropText: $('#dropText'),
     loopStatus: $('#loopStatus'),
     timelineBox: $('#timelineBox'),
@@ -51,7 +57,8 @@
     showStatus: $('#showStatus'),
     autoSync: $('#autoSync'),
     videoWrapper: $('#videoWrapper'),
-    video: $('#mainVideo'),
+    controlVideo: $('#controlVideo'),
+    screenVideo: $('#screenVideo') || $('#mainVideo'),
     screenStatus: $('#screenStatus'),
     modalLinks: $('#modalLinks'),
     modalSponsor: $('#modalSponsor'),
@@ -65,6 +72,8 @@
     btnCopyControl: $('#btnCopyControl'),
     copyMsg: $('#copyMsg')
   };
+
+  const video = mode === 'screen' ? els.screenVideo : els.controlVideo;
 
   const state = {
     hasClip: false,
@@ -91,9 +100,70 @@
   let dragKind = null;
   let dragData = null;
   let syncTimer = null;
+  let pendingSeek = null;
 
-  document.body.classList.toggle('is-screen', mode === 'screen');
-  document.body.classList.toggle('is-control', mode !== 'screen');
+  function injectControlPreviewFixCss() {
+    if ($('#peps-var-replay-hotfix-css')) return;
+    const style = document.createElement('style');
+    style.id = 'peps-var-replay-hotfix-css';
+    style.textContent = `
+      body.is-control #dropZone.drop-zone {
+        min-height: 128px;
+        padding: 0;
+        overflow: hidden;
+      }
+      body.is-control #dropZone.drop-zone.ready { min-height: 184px; }
+      .control-video {
+        display: none;
+        width: 100%;
+        height: 184px;
+        object-fit: contain;
+        background: #000;
+        transform-origin: center center;
+        pointer-events: none;
+      }
+      body.is-control #dropZone.ready .control-video { display: block; }
+      .drop-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        padding: 15px;
+        background: rgba(43,43,43,.96);
+        transition: .18s ease;
+      }
+      body.is-control #dropZone.ready .drop-overlay {
+        inset: auto 6px 6px 6px;
+        align-items: flex-start;
+        justify-content: flex-start;
+        text-align: left;
+        padding: 6px 8px;
+        border-radius: 5px;
+        background: rgba(0,0,0,.68);
+        color: #d6ffd6;
+      }
+      body.is-control #dropZone.ready .drop-icon { display: none; }
+      body.is-control #dropZone.loading { border-color: #ffca28; color: #ffca28; }
+      body.is-control #dropZone.ready { border-color: #44aa44; color: #d6ffd6; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureControlVideo() {
+    const dz = $('#dropZone');
+    if (!dz || $('#controlVideo')) return;
+    dz.innerHTML = `
+      <video id="controlVideo" class="control-video" muted playsinline preload="metadata"></video>
+      <div id="dropOverlay" class="drop-overlay">
+        <div class="drop-icon" aria-hidden="true">▣</div>
+        <b id="dropTitle">คลิก</b> หรือ ลากไฟล์วิดีโอมาวางที่นี่<br>
+        <span id="dropText">รองรับทุกขนาดความยาวคลิป</span>
+      </div>
+    `;
+  }
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -139,9 +209,7 @@
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(DB_STORE)) {
-          db.createObjectStore(DB_STORE, { keyPath: 'id' });
-        }
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -177,28 +245,30 @@
     return row;
   }
 
+  function setDropState(kind, title, subtitle) {
+    if (!els.dropZone) return;
+    els.dropZone.classList.toggle('loading', kind === 'loading');
+    els.dropZone.classList.toggle('ready', kind === 'ready');
+    if (els.dropTitle) els.dropTitle.textContent = title;
+    if (els.dropText) els.dropText.textContent = subtitle;
+  }
+
   async function loadBlob(blob, meta = {}) {
-    if (!blob || !els.video) return;
+    if (!blob || !video) return;
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(blob);
-    els.video.src = objectUrl;
-    els.video.load();
+    pendingSeek = Number.isFinite(state.currentTime) ? state.currentTime : 0;
     state.hasClip = true;
     state.clipName = meta.name || 'replay-video';
     state.clipVersion = meta.updatedAt || Date.now();
-    setStatus(mode === 'screen' ? 'Clip received' : `Ready: ${state.clipName}`);
-    if (els.dropZone) {
-      els.dropZone.classList.remove('loading');
-      els.dropZone.classList.add('ready');
-      els.dropZone.innerHTML = `<div class="drop-icon" aria-hidden="true">▣</div><b>Ready:</b> ${escapeHTML(state.clipName)}<br><span id="dropText">คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป</span>`;
-    }
+    video.pause();
+    video.src = objectUrl;
+    video.load();
+    video.playbackRate = state.speed;
+    video.muted = mode === 'screen' ? !state.screenAudio : true;
+    setStatus(mode === 'screen' ? 'Clip loaded on Screen' : `Ready: ${state.clipName}`);
+    if (mode === 'control') setDropState('ready', `Ready: ${state.clipName}`, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
     render();
-  }
-
-  function escapeHTML(text) {
-    return String(text).replace(/[&<>'"]/g, (ch) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[ch]));
   }
 
   async function loadSaved() {
@@ -217,10 +287,8 @@
       alert('กรุณาเลือกไฟล์วิดีโอเท่านั้น');
       return;
     }
-    els.dropZone?.classList.add('loading');
-    if (els.dropZone) els.dropZone.innerHTML = '<div class="drop-icon">⌛</div><b>Loading...</b><br><span id="dropText">กำลังเตรียมคลิปสำหรับ Replay</span>';
-    await saveClip(file);
-    await loadBlob(file, { name: file.name, type: file.type, updatedAt: Date.now() });
+    setDropState('loading', 'Loading...', 'กำลังเตรียมคลิปสำหรับ Replay');
+    state.hasClip = false;
     state.currentTime = 0;
     state.duration = 0;
     state.isPlaying = false;
@@ -232,6 +300,9 @@
     state.zoom = 1;
     state.panXPct = 0;
     state.panYPct = 0;
+    await saveClip(file);
+    await loadBlob(file, { name: file.name, type: file.type, updatedAt: Date.now() });
+    post('clip:blob', { blob: file, meta: { name: file.name, type: file.type, updatedAt: state.clipVersion } });
     post('clip:update', { version: state.clipVersion, name: state.clipName });
     broadcast('file');
     render();
@@ -247,7 +318,7 @@
     if (!duration) return 0;
     const start = state.viewStart * duration;
     const width = state.viewWidth * duration;
-    return clamp(((time - start) / width) * 100, 0, 100);
+    return clamp(((time - start) / Math.max(0.001, width)) * 100, 0, 100);
   }
 
   function navPctFromTime(time) {
@@ -270,38 +341,46 @@
   }
 
   function setCurrentTime(time, shouldBroadcast = true) {
-    if (!els.video) return;
-    const duration = state.duration || els.video.duration || 0;
+    if (!video || !state.hasClip) return;
+    const duration = state.duration || video.duration || 0;
     const next = clamp(Number(time) || 0, 0, duration || 0);
     suppress = true;
-    els.video.currentTime = next;
+    video.currentTime = next;
     suppress = false;
     state.currentTime = next;
     renderTimeline();
     if (shouldBroadcast) broadcast('seek');
   }
 
-  function play() {
-    if (!state.hasClip || !els.video) return;
-    els.video.playbackRate = state.speed;
-    const p = els.video.play();
-    if (p?.catch) p.catch(() => setStatus('Click once to allow playback'));
-    state.isPlaying = true;
-    broadcast('play');
+  async function play() {
+    if (!state.hasClip || !video) return;
+    video.playbackRate = state.speed;
+    video.muted = mode === 'screen' ? !state.screenAudio : true;
+    try {
+      await video.play();
+      state.isPlaying = true;
+      setStatus('PLAYING');
+      broadcast('play');
+    } catch (err) {
+      console.warn(err);
+      state.isPlaying = false;
+      setStatus('PLAY BLOCKED: click video/control once');
+    }
     renderButtons();
   }
 
   function pause() {
-    if (!els.video) return;
-    els.video.pause();
+    if (!video) return;
+    video.pause();
     state.isPlaying = false;
+    setStatus('PAUSED');
     broadcast('pause');
     renderButtons();
   }
 
   function setSpeed(value) {
     state.speed = clamp(Number(value) || 1, 0.01, 2);
-    if (els.video) els.video.playbackRate = state.speed;
+    if (video) video.playbackRate = state.speed;
     renderSpeed();
     broadcast('speed');
   }
@@ -333,12 +412,12 @@
   }
 
   function applyTransform() {
-    if (!els.video) return;
+    if (!video) return;
     const maxX = ((state.zoom - 1) / Math.max(state.zoom, 1)) * 50;
     const maxY = ((state.zoom - 1) / Math.max(state.zoom, 1)) * 50;
     const translateX = (state.panXPct / 100) * maxX;
     const translateY = (state.panYPct / 100) * maxY;
-    els.video.style.transform = `translate(${translateX}%, ${translateY}%) scale(${state.zoom})`;
+    video.style.transform = `translate(${translateX}%, ${translateY}%) scale(${state.zoom})`;
   }
 
   function setA(time = state.currentTime) {
@@ -373,28 +452,29 @@
     post('state', { ...state, reason });
   }
 
-  function applyIncoming(next) {
+  async function applyIncoming(next = {}) {
     const prevVersion = state.clipVersion;
-    Object.assign(state, next || {});
+    Object.assign(state, next);
     state.speed = clamp(Number(state.speed) || 1, 0.01, 2);
     state.zoom = clamp(Number(state.zoom) || 1, 1, 10);
     state.viewStart = clamp(Number(state.viewStart) || 0, 0, 0.99);
     state.viewWidth = clamp(Number(state.viewWidth) || 1, 0.01, 1);
 
-    if (mode === 'screen' && state.clipVersion && state.clipVersion !== prevVersion) loadSaved();
+    if (mode === 'screen' && state.clipVersion && state.clipVersion !== prevVersion) {
+      await loadSaved();
+    }
 
-    if (els.video) {
-      els.video.playbackRate = state.speed;
-      els.video.muted = !state.screenAudio;
-      const drift = Math.abs((els.video.currentTime || 0) - state.currentTime);
+    if (video) {
+      video.playbackRate = state.speed;
+      video.muted = !state.screenAudio;
+      const drift = Math.abs((video.currentTime || 0) - state.currentTime);
       if (state.hasClip && Number.isFinite(state.currentTime) && (drift > 0.25 || next.reason === 'seek')) {
-        els.video.currentTime = state.currentTime;
+        try { video.currentTime = state.currentTime; } catch (err) { pendingSeek = state.currentTime; }
       }
-      if (state.isPlaying && els.video.paused) {
-        const p = els.video.play();
-        if (p?.catch) p.catch(() => setStatus('Click Screen once to allow playback'));
+      if (state.isPlaying && video.paused) {
+        video.play().catch(() => setStatus('Click Screen once to allow playback'));
       }
-      if (!state.isPlaying && !els.video.paused) els.video.pause();
+      if (!state.isPlaying && !video.paused) video.pause();
     }
     render();
   }
@@ -485,7 +565,7 @@
     if (els.screenAudio) els.screenAudio.checked = state.screenAudio;
     if (els.showStatus) els.showStatus.checked = state.showStatus;
     if (els.autoSync) els.autoSync.checked = state.autoSync;
-    if (els.video) els.video.muted = !state.screenAudio;
+    if (video) video.muted = mode === 'screen' ? !state.screenAudio : true;
     if (els.videoWrapper) {
       els.videoWrapper.classList.toggle('ready', state.hasClip && mode === 'screen' && !state.showStatus);
       els.videoWrapper.classList.toggle('hide-status', !state.showStatus);
@@ -535,8 +615,8 @@
 
     els.btnPlay?.addEventListener('click', play);
     els.btnPause?.addEventListener('click', pause);
-    els.btnSetA?.addEventListener('click', () => setA(els.video?.currentTime || state.currentTime));
-    els.btnSetB?.addEventListener('click', () => setB(els.video?.currentTime || state.currentTime));
+    els.btnSetA?.addEventListener('click', () => setA(video?.currentTime || state.currentTime));
+    els.btnSetB?.addEventListener('click', () => setB(video?.currentTime || state.currentTime));
     els.btnClearLoop?.addEventListener('click', clearLoop);
     els.btnJumpA?.addEventListener('click', () => state.loopA !== null && setCurrentTime(state.loopA));
     els.btnJumpB?.addEventListener('click', () => state.loopB !== null && setCurrentTime(state.loopB));
@@ -611,7 +691,6 @@
       event.preventDefault();
       event.stopPropagation();
       dragKind = kind;
-      dragData = {};
       if (kind === 'A') els.markA?.classList.add('dragging');
       if (kind === 'B') els.markB?.classList.add('dragging');
       window.addEventListener('pointermove', move);
@@ -632,7 +711,6 @@
       els.markA?.classList.remove('dragging');
       els.markB?.classList.remove('dragging');
       dragKind = null;
-      dragData = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
     }
@@ -740,8 +818,8 @@
         event.preventDefault();
         state.isPlaying ? pause() : play();
       }
-      if (event.key.toLowerCase() === 'a') setA(els.video?.currentTime || state.currentTime);
-      if (event.key.toLowerCase() === 'b') setB(els.video?.currentTime || state.currentTime);
+      if (event.key.toLowerCase() === 'a') setA(video?.currentTime || state.currentTime);
+      if (event.key.toLowerCase() === 'b') setB(video?.currentTime || state.currentTime);
       if (event.key.toLowerCase() === 'c') clearLoop();
       if (event.key.toLowerCase() === 'r') resetZoom();
       if (event.key === 'ArrowLeft') setCurrentTime(state.currentTime - 1);
@@ -754,33 +832,42 @@
   }
 
   function setupVideoEvents() {
-    if (!els.video) return;
-    els.video.addEventListener('loadedmetadata', () => {
-      state.duration = els.video.duration || 0;
-      state.currentTime = els.video.currentTime || 0;
-      els.video.playbackRate = state.speed;
+    if (!video) return;
+    video.addEventListener('loadedmetadata', () => {
+      state.duration = video.duration || 0;
+      if (pendingSeek !== null) {
+        try { video.currentTime = clamp(pendingSeek, 0, state.duration || pendingSeek); } catch {}
+        pendingSeek = null;
+      }
+      state.currentTime = video.currentTime || 0;
+      state.hasClip = true;
+      video.playbackRate = state.speed;
       render();
       broadcast('metadata');
     });
-    els.video.addEventListener('timeupdate', () => {
-      if (!suppress) state.currentTime = els.video.currentTime || 0;
+    video.addEventListener('timeupdate', () => {
+      if (!suppress) state.currentTime = video.currentTime || 0;
       if (loopActive() && state.currentTime >= state.loopB - 0.025) {
-        els.video.currentTime = state.loopA;
+        video.currentTime = state.loopA;
         state.currentTime = state.loopA;
-        if (state.isPlaying) els.video.play().catch(() => {});
+        if (state.isPlaying) video.play().catch(() => {});
       }
       renderTimeline();
-      if (mode === 'control' && state.autoSync) broadcast('timeupdate');
     });
-    els.video.addEventListener('play', () => {
+    video.addEventListener('play', () => {
       state.isPlaying = true;
       renderButtons();
       broadcast('video-play');
     });
-    els.video.addEventListener('pause', () => {
+    video.addEventListener('pause', () => {
       state.isPlaying = false;
       renderButtons();
       broadcast('video-pause');
+    });
+    video.addEventListener('error', () => {
+      const err = video.error;
+      setStatus(err ? `VIDEO ERROR ${err.code}` : 'VIDEO ERROR');
+      console.warn('Video error', err);
     });
   }
 
@@ -789,7 +876,10 @@
     bc.addEventListener('message', async (event) => {
       const msg = event.data || {};
       if (!msg.type || msg.source === mode) return;
-      if (mode === 'screen' && msg.type === 'state') applyIncoming(msg.payload);
+      if (mode === 'screen' && msg.type === 'clip:blob' && msg.payload?.blob) {
+        await loadBlob(msg.payload.blob, msg.payload.meta || {});
+      }
+      if (mode === 'screen' && msg.type === 'state') await applyIncoming(msg.payload);
       if (mode === 'screen' && msg.type === 'clip:update') await loadSaved();
       if (mode === 'control' && msg.type === 'screen:ready') broadcast('screen-ready');
     });
@@ -799,12 +889,12 @@
     if (mode !== 'control') return;
     clearInterval(syncTimer);
     syncTimer = setInterval(() => {
-      if (!state.autoSync || !state.hasClip || !els.video) return;
-      state.currentTime = els.video.currentTime || 0;
-      state.duration = els.video.duration || state.duration;
-      state.isPlaying = !els.video.paused;
+      if (!state.autoSync || !state.hasClip || !video) return;
+      state.currentTime = video.currentTime || 0;
+      state.duration = video.duration || state.duration;
+      state.isPlaying = !video.paused;
       broadcast('heartbeat');
-    }, 260);
+    }, 300);
   }
 
   async function init() {
@@ -817,7 +907,7 @@
     if (mode === 'screen') {
       post('screen:ready', { ready: true });
       document.addEventListener('click', () => {
-        if (state.isPlaying && els.video?.paused) els.video.play().catch(() => {});
+        if (state.isPlaying && video?.paused) video.play().catch(() => {});
       }, { once: true });
     }
   }
