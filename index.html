@@ -8,147 +8,149 @@
   <link rel="stylesheet" href="assets/var-replay.css" />
 </head>
 <body>
-  <div id="app" class="app" data-mode="control">
-    <header class="topbar control-only">
-      <div class="brand-block">
-        <div class="eyebrow">OBS VAR REPLAY</div>
-        <h1>Peps VAR Replay Studio</h1>
-        <p>Control Center สำหรับ OBS Browser Source — โหลดวิดีโอ, ตั้ง Loop A-B, ปรับสปีด, ซูม/แพน และส่งภาพออกจอ Screen</p>
+  <header class="app-header control-only" aria-label="Application header">
+    <div class="logo-header-main">OBS VAR REPLAY</div>
+    <div class="logo-header-sub">PEPS CONTROL CENTER V1.1</div>
+  </header>
+
+  <main id="controlsUi" class="control-mode control-only" aria-label="VAR replay control panel">
+    <input id="fileInput" type="file" accept="video/*" hidden />
+
+    <section id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์วิดีโอ">
+      <div class="drop-icon" aria-hidden="true">▣</div>
+      <b>คลิก</b> หรือ ลากไฟล์วิดีโอมาวางที่นี่<br />
+      <span id="dropText">รองรับทุกขนาดความยาวคลิป</span>
+    </section>
+
+    <div id="loopStatus" class="loop-status">LOOP A-B OFF</div>
+
+    <section class="timeline-wrapper" aria-label="Timeline controls">
+      <div id="timelineBox" class="timeline-container">
+        <div class="track-bg"></div>
+        <div id="trackWindow" class="track-window"></div>
+        <div id="trackLoop" class="track-loop"></div>
+        <div id="trackFill" class="track-fill"></div>
+
+        <button id="markA" class="marker marker-a" type="button" aria-label="Marker A">
+          <span class="marker-head">A</span>
+        </button>
+        <button id="markB" class="marker marker-b" type="button" aria-label="Marker B">
+          <span class="marker-head">B</span>
+        </button>
+        <div id="clickLayer" class="click-layer" aria-hidden="true"></div>
       </div>
-      <div class="top-actions">
-        <button id="btnOpenLinks" class="btn ghost">Get Screen Link</button>
-        <button id="btnOpenScreen" class="btn primary">Open Screen</button>
+
+      <div class="time-readout">
+        <span id="currTime">0:00</span>
+        <span id="totalTime">0:00</span>
       </div>
-    </header>
 
-    <main id="controlView" class="layout control-only">
-      <section class="panel stage-panel">
-        <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Drop or select video file">
-          <input id="fileInput" type="file" accept="video/*" hidden />
-          <video id="controlVideo" class="video-preview" playsinline muted></video>
-          <div id="emptyState" class="empty-state">
-            <div class="drop-icon">VAR</div>
-            <h2>คลิก หรือ ลากไฟล์วิดีโอมาวางที่นี่</h2>
-            <p>รองรับไฟล์วิดีโอทั่วไป เช่น MP4, MOV, WebM — เหมาะสำหรับคลิปรีเพลย์/VAR ก่อนส่งเข้า OBS</p>
-          </div>
+      <div id="navBox" class="navigator-container" aria-label="Timeline navigator">
+        <div id="navPlayhead" class="nav-playhead"></div>
+        <div id="navWindow" class="nav-window">
+          <button id="navHandleLeft" class="nav-handle left" type="button" aria-label="Navigator start"></button>
+          <button id="navHandleRight" class="nav-handle right" type="button" aria-label="Navigator end"></button>
         </div>
-
-        <div class="time-row">
-          <span id="currentTimeLabel">0:00</span>
-          <input id="timeline" class="timeline" type="range" min="0" max="1000" value="0" step="1" aria-label="Timeline seek" />
-          <span id="durationLabel">0:00</span>
-        </div>
-
-        <div class="loop-status" id="loopStatus">LOOP A-B OFF</div>
-
-        <div class="ab-readout">
-          <div class="ab-card">
-            <span>A</span>
-            <strong id="pointALabel">0:00</strong>
-          </div>
-          <div class="ab-card">
-            <span>B</span>
-            <strong id="pointBLabel">0:00</strong>
-          </div>
-          <div class="ab-card wide">
-            <span>Navigator</span>
-            <strong>ลากขอบเพื่อซูม Timeline</strong>
-          </div>
-        </div>
-
-        <div id="navigator" class="navigator" aria-label="Timeline navigator">
-          <div id="navSelection" class="nav-selection"></div>
-          <button id="navStart" class="nav-handle start" aria-label="Timeline zoom start"></button>
-          <button id="navEnd" class="nav-handle end" aria-label="Timeline zoom end"></button>
-        </div>
-      </section>
-
-      <section class="panel control-panel">
-        <div class="section-title">
-          <span>CONTROL CENTER</span>
-          <small>V1.0</small>
-        </div>
-
-        <div class="button-grid main-controls">
-          <button id="btnPlay" class="btn big primary">▶ PLAY</button>
-          <button id="btnPause" class="btn big">⏸ PAUSE</button>
-          <button id="btnSetA" class="btn big">SET A</button>
-          <button id="btnSetB" class="btn big">SET B</button>
-          <button id="btnClearLoop" class="btn danger full">CLEAR LOOP</button>
-        </div>
-
-        <div class="control-group">
-          <label for="speedRange">SPEED: <strong id="speedLabel">1.0x</strong></label>
-          <div class="slider-row">
-            <button id="speedDown" class="mini-btn">−</button>
-            <input id="speedRange" type="range" min="0.25" max="2" value="1" step="0.05" />
-            <button id="speedUp" class="mini-btn">+</button>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label for="zoomRange">ZOOM: <strong id="zoomLabel">1.0x</strong></label>
-          <div class="slider-row">
-            <button id="zoomDown" class="mini-btn">−</button>
-            <input id="zoomRange" type="range" min="1" max="3" value="1" step="0.05" />
-            <button id="zoomUp" class="mini-btn">+</button>
-          </div>
-        </div>
-
-        <div class="control-group two-col">
-          <label for="panXRange">PAN X: <strong id="panXLabel">0</strong></label>
-          <input id="panXRange" type="range" min="-500" max="500" value="0" step="1" />
-          <label for="panYRange">PAN Y: <strong id="panYLabel">0</strong></label>
-          <input id="panYRange" type="range" min="-300" max="300" value="0" step="1" />
-        </div>
-
-        <div class="button-grid">
-          <button id="btnResetView" class="btn full">↺ Reset Zoom & Position</button>
-          <button id="btnJumpA" class="btn">Jump A</button>
-          <button id="btnJumpB" class="btn">Jump B</button>
-          <button id="btnBack1" class="btn">−1s</button>
-          <button id="btnForward1" class="btn">+1s</button>
-        </div>
-
-        <div class="control-group options">
-          <label class="check-line"><input id="screenAudio" type="checkbox" /> ส่งเสียงไปที่ Screen</label>
-          <label class="check-line"><input id="autoSync" type="checkbox" checked /> Sync เวลาไปยัง Screen อัตโนมัติ</label>
-          <label class="check-line"><input id="showSafeFrame" type="checkbox" checked /> แสดง Safe Frame บน Screen</label>
-        </div>
-
-        <div class="hint-box">
-          <strong>Shortcuts</strong>
-          <p>Space = Play/Pause, A = Set A, B = Set B, C = Clear Loop, R = Reset View, ←/→ = Seek 1s</p>
-        </div>
-      </section>
-    </main>
-
-    <main id="screenView" class="screen-view screen-only">
-      <div class="screen-frame" id="screenFrame">
-        <video id="screenVideo" class="screen-video" playsinline></video>
-        <div id="screenSafeFrame" class="safe-frame"></div>
-        <div class="screen-badge">VAR REPLAY</div>
-        <div id="screenStatus" class="screen-status">Waiting for control…</div>
       </div>
-    </main>
+      <div class="navigator-caption">Navigator: ลากขอบเพื่อซูม Timeline / ลากกลางเพื่อเลื่อนช่วง</div>
+    </section>
+
+    <section class="btn-grid" aria-label="Playback buttons">
+      <button id="btnPlay" class="btn-play" type="button">▶ PLAY</button>
+      <button id="btnPause" class="btn-pause" type="button">⏸ PAUSE</button>
+      <button id="btnSetA" type="button">SET A</button>
+      <button id="btnSetB" type="button">SET B</button>
+    </section>
+
+    <button id="btnClearLoop" class="clear-loop-btn" type="button">CLEAR LOOP</button>
+
+    <section class="slider-row speed-row" aria-label="Speed control">
+      <div class="slider-label-line">
+        <span>SPEED: <strong id="speedVal">1.0x</strong></span>
+        <span id="statusText">READY</span>
+      </div>
+      <input id="speedRange" type="range" min="0.01" max="2.0" step="0.01" value="1.0" />
+    </section>
+
+    <section class="pan-control-wrapper" aria-label="Pan and zoom control">
+      <div class="v-slider-cont">
+        <span>ZOOM</span>
+        <input id="zoomRange" class="v-slider" type="range" min="1.0" max="10.0" step="0.1" value="1.0" orient="vertical" />
+        <strong id="zoomVal">1.0x</strong>
+      </div>
+
+      <div class="pan-area-cont">
+        <div id="panFrame" class="pan-frame">
+          <div id="panGrid" class="pan-grid"></div>
+          <div id="panViewport" class="pan-viewport" tabindex="0" role="slider" aria-label="Drag viewport to pan"></div>
+        </div>
+        <button id="btnResetZoom" class="reset-zoom-btn" type="button">↺ Reset Zoom & Position</button>
+      </div>
+    </section>
+
+    <section class="utility-panel" aria-label="Utility commands">
+      <button id="btnJumpA" type="button">Jump A</button>
+      <button id="btnJumpB" type="button">Jump B</button>
+      <button id="btnBack1" type="button">−1s</button>
+      <button id="btnForward1" type="button">+1s</button>
+    </section>
+
+    <section class="toggle-panel" aria-label="Screen options">
+      <label><input id="screenAudio" type="checkbox" /> ส่งเสียงไปที่ Screen</label>
+      <label><input id="showStatus" type="checkbox" checked /> แสดงสถานะบน Screen</label>
+      <label><input id="autoSync" type="checkbox" checked /> Sync อัตโนมัติ</label>
+    </section>
+
+    <section class="menu-bar" aria-label="Menu buttons">
+      <button id="btnOpenLinks" class="btn-outline" type="button">Get Link</button>
+      <button id="btnOpenSponsor" class="btn-outline sponsor" type="button">Sponsor</button>
+    </section>
+  </main>
+
+  <main id="screenView" class="screen-mode screen-only" aria-label="OBS screen output">
+    <div id="videoWrapper" class="video-wrapper">
+      <video id="mainVideo" muted playsinline></video>
+      <div id="screenStatus" class="screen-status">Waiting for Control…</div>
+    </div>
+  </main>
+
+  <div id="modalLinks" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="linkTitle">
+    <div class="modal">
+      <button class="modal-close" id="btnCloseLinks" type="button" aria-label="Close">×</button>
+      <h2 id="linkTitle">Graphic Link (Screen)</h2>
+      <p>สำหรับใส่ใน OBS Browser Source</p>
+      <div class="copy-group">
+        <input id="linkInputScreen" class="copy-input" type="text" readonly />
+        <button id="btnCopyScreen" type="button">Copy</button>
+      </div>
+      <div id="copyMsg" class="copy-msg">Copied!</div>
+      <hr />
+      <p>Control Link สำหรับเปิดเป็น OBS Custom Browser Dock</p>
+      <div class="copy-group">
+        <input id="linkInputControl" class="copy-input" type="text" readonly />
+        <button id="btnCopyControl" type="button">Copy</button>
+      </div>
+    </div>
   </div>
 
-  <dialog id="linkDialog" class="link-dialog">
-    <button id="btnCloseDialog" class="dialog-close" aria-label="Close dialog">×</button>
-    <h2>Graphic Link (Screen)</h2>
-    <p>นำลิงก์นี้ไปใส่ใน OBS Browser Source หรือเปิดใน Custom Browser Dock อีกหน้าหนึ่ง</p>
-    <div class="copy-row">
-      <input id="screenLink" readonly />
-      <button id="btnCopyScreen" class="btn primary">Copy</button>
+  <div id="modalSponsor" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="sponsorTitle">
+    <div class="modal">
+      <button class="modal-close" id="btnCloseSponsor" type="button" aria-label="Close">×</button>
+      <h2 id="sponsorTitle" class="sponsor-title">Support PepsLive</h2>
+      <div class="sponsor-grid">
+        <div class="sponsor-item">
+          <strong>PepsLive / Pepsproduction</strong>
+          <p>เครื่องมือฟรีสำหรับสายไลฟ์กีฬา OBS Dock UI, Scoreboard, Tournament และ Replay Workflow</p>
+          <a class="sponsor-link" href="https://heylink.me/pepslive/" target="_blank" rel="noopener">heylink.me/pepslive</a>
+        </div>
+        <div class="sponsor-item dark">
+          <strong>VAR Replay Studio</strong>
+          <p>ออกแบบสำหรับเปิดเป็น Dock + Browser Source ใช้งานไวในสนามจริง</p>
+        </div>
+      </div>
+      <div class="version-note">Developed for PepsLive · V1.1</div>
     </div>
-    <small id="copyStatus"></small>
-    <hr />
-    <h3>Control Link</h3>
-    <div class="copy-row">
-      <input id="controlLink" readonly />
-      <button id="btnCopyControl" class="btn">Copy</button>
-    </div>
-  </dialog>
+  </div>
 
   <script src="assets/var-replay.js"></script>
 </body>
