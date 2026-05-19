@@ -1,5 +1,20 @@
 # Changelog
 
+## V1.2.0
+
+- แก้ปุ่ม `CLEAR LOOP` ไม่ให้ข้อความล้นขอบเมื่อย่อ/ขยาย Dock UI
+- เพิ่มแท็บสลับโหมด `VAR Replay` และ `Highlight Replay`
+- เพิ่ม Highlight Replay UI แยกจาก VAR เพื่อไม่ให้ปุ่มรก
+- เพิ่มการลากไฟล์หลายคลิปเข้าสู่ Highlight Playlist
+- เพิ่ม Highlight Playlist แสดงจำนวนคลิป, Now Playing และ Next Clip
+- เพิ่มปุ่ม Highlight: Play, Pause, Restart, Prev, Next, Clear
+- เพิ่มโหมดเล่น `Sequential` และ `Random`
+- เพิ่มระบบสุ่มแบบ shuffle bag เพื่อลดโอกาสเล่นคลิปเดิมซ้ำติดกัน
+- เพิ่ม Loop Playlist แบบเล่นวนไม่สิ้นสุด
+- เพิ่ม Highlight Speed slider และ preset 0.5x / 0.75x / 1.0x / 1.5x
+- เพิ่มระบบส่งคลิป Highlight ปัจจุบันไปยัง Screen ผ่าน BroadcastChannel
+- เพิ่ม Screen event สำหรับ Highlight Play / Pause / Restart / Speed / Clear
+
 ## V1.1.0
 
 - ปรับ UX/UI หน้า Control ให้เป็น Dock UI แบบกะทัดรัดใกล้แนว VAR Replay Control Center
