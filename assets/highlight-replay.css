@@ -1,0 +1,295 @@
+/* Highlight Replay mode + responsive dock fixes */
+.clear-loop-btn {
+  min-height: 42px !important;
+  height: auto !important;
+  padding: 0 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: clamp(10px, 2.8vw, 12px) !important;
+}
+
+.replay-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px;
+  border: 1px solid var(--peps-line-o, rgba(255,90,0,.35));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 12px 30px rgba(0,0,0,.20);
+}
+
+.replay-mode-tab {
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #ffbf9b;
+  font-family: "Prompt", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+
+.replay-mode-tab.active {
+  background: linear-gradient(135deg, var(--peps-orange, #ff5a00), var(--peps-orange-2, #ff8a2a));
+  color: #fff;
+  box-shadow: 0 15px 42px rgba(255, 90, 0, .28);
+}
+
+body[data-replay-mode="highlight"] .var-panel {
+  display: none !important;
+}
+
+.highlight-panel {
+  display: none;
+  gap: 10px;
+}
+
+body[data-replay-mode="highlight"] .highlight-panel {
+  display: grid;
+}
+
+.highlight-card {
+  border: 1px solid var(--peps-line, rgba(255,255,255,.12));
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.03)), #111;
+  box-shadow: var(--peps-shadow, 0 24px 70px rgba(0,0,0,.38));
+  backdrop-filter: blur(10px);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.highlight-drop {
+  min-height: 88px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: 1px dashed var(--peps-line-o, rgba(255,90,0,.35));
+  border-radius: 16px;
+  background: rgba(255, 90, 0, .055);
+  color: #ffe4d4;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.highlight-drop.drag-over,
+.highlight-drop:hover {
+  border-color: rgba(255, 138, 42, .78);
+  background: rgba(255, 90, 0, .12);
+  box-shadow: 0 18px 44px rgba(255, 90, 0, .16);
+}
+
+.highlight-drop strong {
+  display: block;
+  margin-bottom: 3px;
+  font-family: "Prompt", sans-serif;
+  font-size: 14px;
+}
+
+.highlight-drop span {
+  display: block;
+  color: var(--peps-muted-2, #8b8b8b);
+  font-size: 11px;
+}
+
+.highlight-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.highlight-mini-box {
+  border: 1px solid var(--peps-line, rgba(255,255,255,.12));
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .045);
+  padding: 10px;
+  min-width: 0;
+}
+
+.highlight-mini-box.wide {
+  grid-column: 1 / -1;
+}
+
+.highlight-mini-box span {
+  display: block;
+  color: var(--peps-muted-2, #8b8b8b);
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .9px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.highlight-mini-box strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-family: "Chakra Petch", "IBM Plex Sans Thai", system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.highlight-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.highlight-controls button,
+.highlight-toggle-row button,
+.highlight-speed-presets button {
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--peps-line, rgba(255,255,255,.12));
+  background: rgba(255,255,255,.06);
+  color: #f5f5f5;
+  font-family: "Prompt", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.highlight-controls .primary {
+  background: linear-gradient(135deg, var(--peps-orange, #ff5a00), var(--peps-orange-2, #ff8a2a));
+  border-color: transparent;
+  color: #fff;
+}
+
+.highlight-controls .danger {
+  color: #fff;
+  background: linear-gradient(135deg, #f04444, var(--peps-orange, #ff5a00));
+  border-color: transparent;
+}
+
+.highlight-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.highlight-toggle-row button.active,
+.highlight-speed-presets button.active {
+  background: rgba(255, 90, 0, .16);
+  border-color: var(--peps-line-o, rgba(255,90,0,.35));
+  color: #ffbf9b;
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, .10);
+}
+
+.highlight-loop-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--peps-muted, #b8b8b8);
+  font-size: 12px;
+}
+
+.highlight-loop-line input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--peps-orange, #ff5a00);
+}
+
+.highlight-speed-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--peps-muted, #b8b8b8);
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.highlight-speed-head strong {
+  color: #ffbf9b;
+}
+
+#highlightSpeedRange {
+  width: 100%;
+  accent-color: var(--peps-orange, #ff5a00);
+}
+
+.highlight-speed-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.highlight-playlist {
+  display: grid;
+  gap: 6px;
+  max-height: min(34vh, 260px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.highlight-playlist-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 13px;
+  background: rgba(0,0,0,.22);
+}
+
+.highlight-playlist-item.active {
+  border-color: var(--peps-line-o, rgba(255,90,0,.35));
+  background: rgba(255,90,0,.11);
+}
+
+.highlight-playlist-item .index {
+  width: 25px;
+  height: 25px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,90,0,.14);
+  color: #ffbf9b;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.highlight-playlist-item .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.highlight-playlist-item .remove {
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #ffb2b2;
+  background: rgba(255, 80, 80, .10);
+  border: 1px solid rgba(255, 100, 100, .26);
+}
+
+.highlight-empty {
+  padding: 12px;
+  color: var(--peps-muted-2, #8b8b8b);
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 360px) {
+  .highlight-controls,
+  .highlight-speed-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
