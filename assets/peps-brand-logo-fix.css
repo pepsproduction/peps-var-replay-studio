@@ -1,0 +1,92 @@
+/* Final visible logo fix: use real asset, smaller size, sweep only inside logo card */
+:root {
+  --peps-brand-logo-url: url("./peps-logo.svg");
+}
+
+.peps-brand-header {
+  width: min(300px, 74vw) !important;
+  padding: 3px 6px 4px !important;
+  border-radius: 16px !important;
+  overflow: visible !important;
+}
+
+.peps-brand-logo {
+  width: min(240px, 62vw) !important;
+  aspect-ratio: 1613 / 592 !important;
+  margin: 0 auto !important;
+  display: block !important;
+  position: relative !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background-image: var(--peps-brand-logo-url) !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-color: transparent !important;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(255,90,0,.22)) !important;
+}
+
+.peps-brand-logo::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 40% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  background: linear-gradient(112deg, transparent 0 30%, rgba(255,255,255,.10) 42%, rgba(255,255,255,.75) 50%, rgba(255,138,42,.18) 58%, transparent 70% 100%) !important;
+  mix-blend-mode: screen !important;
+  transform: translateX(-150%) skewX(-14deg) !important;
+  animation: pepsLogoSweepFixed 4.8s ease-in-out infinite !important;
+  pointer-events: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+.peps-brand-logo::after {
+  content: "" !important;
+  position: absolute !important;
+  left: 18% !important;
+  right: 18% !important;
+  bottom: -4px !important;
+  height: 8px !important;
+  border-radius: 999px !important;
+  background: radial-gradient(ellipse at center, rgba(255,90,0,.28), transparent 70%) !important;
+  filter: blur(7px) !important;
+  opacity: .72 !important;
+}
+
+.peps-brand-subline {
+  margin-top: -5px !important;
+  font-size: clamp(7px, 2vw, 9px) !important;
+  letter-spacing: 1.5px !important;
+}
+
+.app-header {
+  min-height: 64px !important;
+  padding: 5px 8px 4px !important;
+}
+
+.control-mode {
+  height: calc(100vh - 64px) !important;
+}
+
+@keyframes pepsLogoSweepFixed {
+  0%, 18% { transform: translateX(-150%) skewX(-14deg); opacity: 0; }
+  28% { opacity: .82; }
+  46% { transform: translateX(310%) skewX(-14deg); opacity: 0; }
+  100% { transform: translateX(310%) skewX(-14deg); opacity: 0; }
+}
+
+@media (max-width: 560px) {
+  .peps-brand-header { width: min(260px, 78vw) !important; }
+  .peps-brand-logo { width: min(210px, 66vw) !important; }
+  .peps-brand-subline { font-size: 7px !important; letter-spacing: 1px !important; }
+  .app-header { min-height: 58px !important; }
+  .control-mode { height: calc(100vh - 58px) !important; }
+}
+
+@media (max-width: 330px) {
+  .peps-brand-logo { width: min(185px, 68vw) !important; }
+  .app-header { min-height: 54px !important; }
+  .control-mode { height: calc(100vh - 54px) !important; }
+}
