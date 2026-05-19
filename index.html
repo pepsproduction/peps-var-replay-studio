@@ -10,8 +10,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/var-replay.css" />
   <link rel="stylesheet" href="assets/pepslive-theme.css" />
+  <link rel="stylesheet" href="assets/highlight-replay.css" />
 </head>
-<body>
+<body data-replay-mode="var">
   <div class="bg-fx" aria-hidden="true">
     <div class="grid-scan"></div>
     <div class="speed-lines"></div>
@@ -23,21 +24,27 @@
 
   <header class="app-header control-only" aria-label="Application header">
     <div class="logo-header-main">OBS VAR REPLAY</div>
-    <div class="logo-header-sub">PEPS CONTROL CENTER V1.1</div>
+    <div class="logo-header-sub">PEPS CONTROL CENTER V1.2</div>
   </header>
 
   <main id="controlsUi" class="control-mode control-only" aria-label="VAR replay control panel">
     <input id="fileInput" type="file" accept="video/*" hidden />
+    <input id="highlightFileInput" type="file" accept="video/*" multiple hidden />
 
-    <section id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์วิดีโอ">
+    <nav class="replay-mode-tabs" aria-label="Replay mode selector">
+      <button id="tabVarReplay" class="replay-mode-tab active" type="button">VAR Replay</button>
+      <button id="tabHighlightReplay" class="replay-mode-tab" type="button">Highlight Replay</button>
+    </nav>
+
+    <section id="dropZone" class="drop-zone var-panel" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์วิดีโอ">
       <div class="drop-icon" aria-hidden="true">▣</div>
       <b>คลิก</b> หรือ ลากไฟล์วิดีโอมาวางที่นี่<br />
       <span id="dropText">รองรับทุกขนาดความยาวคลิป</span>
     </section>
 
-    <div id="loopStatus" class="loop-status">LOOP A-B OFF</div>
+    <div id="loopStatus" class="loop-status var-panel">LOOP A-B OFF</div>
 
-    <section class="timeline-wrapper" aria-label="Timeline controls">
+    <section class="timeline-wrapper var-panel" aria-label="Timeline controls">
       <div id="timelineBox" class="timeline-container">
         <div class="track-bg"></div>
         <div id="trackWindow" class="track-window"></div>
@@ -68,16 +75,16 @@
       <div class="navigator-caption">Navigator: ลากขอบเพื่อซูม Timeline / ลากกลางเพื่อเลื่อนช่วง</div>
     </section>
 
-    <section class="btn-grid" aria-label="Playback buttons">
+    <section class="btn-grid var-panel" aria-label="Playback buttons">
       <button id="btnPlay" class="btn-play" type="button">▶ PLAY</button>
       <button id="btnPause" class="btn-pause" type="button">⏸ PAUSE</button>
       <button id="btnSetA" type="button">SET A</button>
       <button id="btnSetB" type="button">SET B</button>
     </section>
 
-    <button id="btnClearLoop" class="clear-loop-btn" type="button">CLEAR LOOP</button>
+    <button id="btnClearLoop" class="clear-loop-btn var-panel" type="button">CLEAR LOOP</button>
 
-    <section class="slider-row speed-row" aria-label="Speed control">
+    <section class="slider-row speed-row var-panel" aria-label="Speed control">
       <div class="slider-label-line">
         <span>SPEED: <strong id="speedVal">1.0x</strong></span>
         <span id="statusText">READY</span>
@@ -85,7 +92,7 @@
       <input id="speedRange" type="range" min="0.01" max="2.0" step="0.01" value="1.0" />
     </section>
 
-    <section class="pan-control-wrapper" aria-label="Pan and zoom control">
+    <section class="pan-control-wrapper var-panel" aria-label="Pan and zoom control">
       <div class="v-slider-cont">
         <span>ZOOM</span>
         <input id="zoomRange" class="v-slider" type="range" min="1.0" max="10.0" step="0.1" value="1.0" orient="vertical" />
@@ -101,11 +108,77 @@
       </div>
     </section>
 
-    <section class="utility-panel" aria-label="Utility commands">
+    <section class="utility-panel var-panel" aria-label="Utility commands">
       <button id="btnJumpA" type="button">Jump A</button>
       <button id="btnJumpB" type="button">Jump B</button>
       <button id="btnBack1" type="button">−1s</button>
       <button id="btnForward1" type="button">+1s</button>
+    </section>
+
+    <section id="highlightPanel" class="highlight-panel" aria-label="Highlight replay panel">
+      <section id="highlightDropZone" class="highlight-card highlight-drop" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์ไฮไลท์หลายไฟล์">
+        <div>
+          <strong>ลากคลิป Highlight หลายไฟล์มาวางที่นี่</strong>
+          <span>รองรับ MP4 / MOV / WebM • เล่นเรียงหรือสุ่มและวนได้ไม่สิ้นสุด</span>
+        </div>
+      </section>
+
+      <section class="highlight-card highlight-status-grid">
+        <div class="highlight-mini-box wide">
+          <span>Now Playing</span>
+          <strong id="highlightNowPlaying">ยังไม่มีคลิป</strong>
+        </div>
+        <div class="highlight-mini-box">
+          <span>Clips</span>
+          <strong id="highlightClipCount">0</strong>
+        </div>
+        <div class="highlight-mini-box">
+          <span>Next</span>
+          <strong id="highlightNextClip">-</strong>
+        </div>
+      </section>
+
+      <section class="highlight-card highlight-controls" aria-label="Highlight playback controls">
+        <button id="highlightPlay" class="primary" type="button">▶ PLAY</button>
+        <button id="highlightPause" type="button">⏸ PAUSE</button>
+        <button id="highlightRestart" type="button">↺ RESTART</button>
+        <button id="highlightPrev" type="button">PREV</button>
+        <button id="highlightNext" type="button">NEXT</button>
+        <button id="highlightClear" class="danger" type="button">CLEAR</button>
+      </section>
+
+      <section class="highlight-card">
+        <div class="highlight-toggle-row">
+          <button id="highlightSequential" class="active" type="button">Sequential</button>
+          <button id="highlightRandom" type="button">Random</button>
+        </div>
+        <label class="highlight-loop-line">
+          <input id="highlightLoop" type="checkbox" checked />
+          Loop Playlist ไม่สิ้นสุด
+        </label>
+      </section>
+
+      <section class="highlight-card">
+        <div class="highlight-speed-head">
+          <span>HIGHLIGHT SPEED</span>
+          <strong id="highlightSpeedLabel">1.0x</strong>
+        </div>
+        <input id="highlightSpeedRange" type="range" min="0.25" max="2.0" step="0.05" value="1.0" />
+        <div class="highlight-speed-presets">
+          <button data-highlight-speed="0.5" type="button">0.5x</button>
+          <button data-highlight-speed="0.75" type="button">0.75x</button>
+          <button data-highlight-speed="1" class="active" type="button">1.0x</button>
+          <button data-highlight-speed="1.5" type="button">1.5x</button>
+        </div>
+      </section>
+
+      <section class="highlight-card">
+        <div id="highlightPlaylist" class="highlight-playlist">
+          <div class="highlight-empty">ยังไม่มี Playlist — ลากคลิปหลายไฟล์เข้ามาได้เลย</div>
+        </div>
+      </section>
+
+      <video id="highlightVideo" muted playsinline preload="metadata" hidden></video>
     </section>
 
     <section class="toggle-panel" aria-label="Screen options">
@@ -161,12 +234,13 @@
           <p>ออกแบบสำหรับเปิดเป็น Dock + Browser Source ใช้งานไวในสนามจริง</p>
         </div>
       </div>
-      <div class="version-note">Developed for PepsLive · V1.1</div>
+      <div class="version-note">Developed for PepsLive · V1.2</div>
     </div>
   </div>
 
   <script src="assets/var-replay.js"></script>
   <script src="assets/var-replay-panfix.js"></script>
   <script src="assets/dropzone-filename-only.js"></script>
+  <script src="assets/highlight-replay.js"></script>
 </body>
 </html>
