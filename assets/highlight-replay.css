@@ -146,7 +146,8 @@ body[data-replay-mode="highlight"] .highlight-panel {
 
 .highlight-controls button,
 .highlight-toggle-row button,
-.highlight-speed-presets button {
+.highlight-speed-presets button,
+.highlight-transition-grid button {
   min-height: 40px;
   border-radius: 999px;
   border: 1px solid var(--peps-line, rgba(255,255,255,.12));
@@ -176,7 +177,8 @@ body[data-replay-mode="highlight"] .highlight-panel {
 }
 
 .highlight-toggle-row button.active,
-.highlight-speed-presets button.active {
+.highlight-speed-presets button.active,
+.highlight-transition-grid button.active {
   background: rgba(255, 90, 0, .16);
   border-color: var(--peps-line-o, rgba(255,90,0,.35));
   color: #ffbf9b;
@@ -217,11 +219,31 @@ body[data-replay-mode="highlight"] .highlight-panel {
   accent-color: var(--peps-orange, #ff5a00);
 }
 
-.highlight-speed-presets {
+.highlight-speed-presets,
+.highlight-transition-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-top: 8px;
+}
+
+.highlight-transition-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.highlight-transition-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--peps-muted, #b8b8b8);
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.highlight-transition-title strong {
+  color: #ffbf9b;
 }
 
 .highlight-playlist {
@@ -287,9 +309,27 @@ body[data-replay-mode="highlight"] .highlight-panel {
   font-size: 12px;
 }
 
+body.is-highlight-screen .video-wrapper {
+  background: transparent !important;
+}
+
+#mainVideo.highlight-transition {
+  transition: opacity .32s ease, transform .42s cubic-bezier(.2,.8,.2,1), filter .42s ease;
+}
+
+#mainVideo.ht-fade-in { opacity: 0; transform: scale(1.01); }
+#mainVideo.ht-fade-out { opacity: 0; transform: scale(.985); }
+#mainVideo.ht-slide-left-in { opacity: 0; transform: translateX(9%) scale(1.01); }
+#mainVideo.ht-slide-right-in { opacity: 0; transform: translateX(-9%) scale(1.01); }
+#mainVideo.ht-zoom-pop-in { opacity: 0; transform: scale(.86); filter: saturate(1.25); }
+#mainVideo.ht-flash-cut-in { opacity: 0; filter: brightness(2.1) contrast(1.2); transform: scale(1.015); }
+#mainVideo.ht-blur-sweep-in { opacity: 0; filter: blur(18px) brightness(1.25); transform: scale(1.06); }
+#mainVideo.ht-glitch-in { opacity: .18; filter: hue-rotate(18deg) contrast(1.6); transform: translateX(-2.5%) scale(1.02); }
+
 @media (max-width: 360px) {
   .highlight-controls,
-  .highlight-speed-presets {
+  .highlight-speed-presets,
+  .highlight-transition-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
