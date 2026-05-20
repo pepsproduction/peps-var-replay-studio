@@ -30,6 +30,7 @@
       transform: translate3d(0,0,0) scale(1);
       filter: none;
       will-change: opacity, transform, filter;
+      z-index: 1;
     }
 
     .highlight-transition-overlay {
@@ -43,12 +44,12 @@
     }
 
     .highlight-transition-overlay.flash {
-      background: radial-gradient(circle at center, rgba(255,255,255,.98), rgba(255,120,0,.55) 42%, rgba(0,0,0,0) 72%);
+      background: radial-gradient(circle at center, rgba(255,255,255,.98), rgba(255,120,0,.62) 42%, rgba(0,0,0,0) 72%);
       mix-blend-mode: screen;
     }
 
     .highlight-transition-overlay.blur {
-      background: linear-gradient(110deg, transparent 0 30%, rgba(255,90,0,.55) 45%, rgba(255,255,255,.75) 50%, rgba(255,90,0,.45) 55%, transparent 70% 100%);
+      background: linear-gradient(110deg, transparent 0 30%, rgba(255,90,0,.55) 45%, rgba(255,255,255,.85) 50%, rgba(255,90,0,.45) 55%, transparent 70% 100%);
       mix-blend-mode: screen;
       filter: blur(10px);
     }
@@ -65,6 +66,7 @@
 
   let currentAnimations = [];
   let pending = null;
+  let pendingTimer = null;
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -88,6 +90,9 @@
     currentAnimations.push(animation);
     animation.addEventListener('finish', () => {
       currentAnimations = currentAnimations.filter((item) => item !== animation);
+      target.style.opacity = '';
+      target.style.transform = '';
+      target.style.filter = '';
     });
     return animation;
   }
@@ -102,7 +107,7 @@
       overlay.classList.add('wipe');
       animate(overlay, [
         { opacity: .95, transform: 'translateX(-110%)' },
-        { opacity: .72, offset: .42, transform: 'translateX(0%)' },
+        { opacity: .78, offset: .46, transform: 'translateX(0%)' },
         { opacity: 0, transform: 'translateX(110%)' }
       ], common);
       animate(video, [
@@ -116,7 +121,7 @@
       overlay.classList.add('wipe');
       animate(overlay, [
         { opacity: .95, transform: 'translateX(110%)' },
-        { opacity: .72, offset: .42, transform: 'translateX(0%)' },
+        { opacity: .78, offset: .46, transform: 'translateX(0%)' },
         { opacity: 0, transform: 'translateX(-110%)' }
       ], common);
       animate(video, [
@@ -130,10 +135,10 @@
       animate(overlay, [
         { opacity: .82, background: '#000' },
         { opacity: 0, background: '#000' }
-      ], { duration: Math.min(duration, 900), easing: 'ease-out', fill: 'both' });
+      ], { duration: Math.min(duration, 1000), easing: 'ease-out', fill: 'both' });
       animate(video, [
-        { opacity: 0, transform: 'scale(.78)', filter: 'contrast(1.25) saturate(1.25)' },
-        { opacity: 1, transform: 'scale(1.035)', offset: .72, filter: 'contrast(1.08) saturate(1.08)' },
+        { opacity: 0, transform: 'scale(.76)', filter: 'contrast(1.28) saturate(1.25)' },
+        { opacity: 1, transform: 'scale(1.04)', offset: .72, filter: 'contrast(1.08) saturate(1.08)' },
         { opacity: 1, transform: 'scale(1)', filter: 'none' }
       ], common);
       return;
@@ -143,11 +148,11 @@
       overlay.classList.add('flash');
       animate(overlay, [
         { opacity: 1, transform: 'scale(1)' },
-        { opacity: .55, offset: .18, transform: 'scale(1.05)' },
+        { opacity: .6, offset: .20, transform: 'scale(1.05)' },
         { opacity: 0, transform: 'scale(1.24)' }
-      ], { duration: Math.min(duration, 1200), easing: 'ease-out', fill: 'both' });
+      ], { duration: Math.min(duration, 1300), easing: 'ease-out', fill: 'both' });
       animate(video, [
-        { opacity: .25, filter: 'brightness(2.25) contrast(1.25)', transform: 'scale(1.025)' },
+        { opacity: .18, filter: 'brightness(2.35) contrast(1.25)', transform: 'scale(1.026)' },
         { opacity: 1, filter: 'brightness(1) contrast(1)', transform: 'scale(1)' }
       ], common);
       return;
@@ -157,57 +162,68 @@
       overlay.classList.add('blur');
       animate(overlay, [
         { opacity: 0, transform: 'translateX(-120%) skewX(-12deg)' },
-        { opacity: .9, offset: .45, transform: 'translateX(0%) skewX(-12deg)' },
+        { opacity: .94, offset: .45, transform: 'translateX(0%) skewX(-12deg)' },
         { opacity: 0, transform: 'translateX(120%) skewX(-12deg)' }
       ], common);
       animate(video, [
-        { opacity: 0, filter: 'blur(24px) brightness(1.35)', transform: 'scale(1.08)' },
+        { opacity: 0, filter: 'blur(26px) brightness(1.35)', transform: 'scale(1.08)' },
         { opacity: 1, filter: 'blur(0px) brightness(1)', transform: 'scale(1)' }
       ], common);
       return;
     }
 
-    // Fade default.
     animate(overlay, [
       { opacity: .9, background: '#000' },
       { opacity: 0, background: '#000' }
     ], common);
     animate(video, [
-      { opacity: 0, transform: 'scale(1.01)', filter: 'brightness(.72)' },
+      { opacity: 0, transform: 'scale(1.01)', filter: 'brightness(.68)' },
       { opacity: 1, transform: 'scale(1)', filter: 'brightness(1)' }
     ], common);
   }
 
-  function scheduleTransition(payload = {}) {
+  function prepareTransition(payload = {}) {
     pending = {
-      type: payload.transition || pending?.type || 'fade',
-      duration: payload.transitionDuration || pending?.duration || 1,
-      stamp: Date.now()
+      type: payload.transition || 'fade',
+      duration: clamp(Number(payload.transitionDuration) || 1, 0.5, 5),
+      started: false
     };
 
-    const start = () => {
-      if (!pending) return;
-      const data = pending;
-      pending = null;
-      runTransition(data.type, data.duration);
-    };
+    stopAnimations();
+    video.style.opacity = '0';
+    video.style.filter = 'brightness(.55)';
+    overlay.style.opacity = '.88';
+    overlay.style.background = '#000';
 
-    if (video.readyState >= 2) {
-      requestAnimationFrame(start);
-      return;
-    }
+    if (pendingTimer) clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => startPendingTransition(), 900);
+  }
 
-    video.addEventListener('loadeddata', start, { once: true });
-    setTimeout(() => {
-      if (pending && Date.now() - pending.stamp > 250) start();
-    }, 320);
+  function startPendingTransition() {
+    if (!pending || pending.started) return;
+    pending.started = true;
+    const data = pending;
+    pending = null;
+    if (pendingTimer) clearTimeout(pendingTimer);
+    requestAnimationFrame(() => runTransition(data.type, data.duration));
   }
 
   bc.addEventListener('message', (event) => {
     const msg = event.data || {};
     if (!msg.type || msg.source === 'highlight-screen') return;
     if (msg.type === 'highlight:clip' || msg.type === 'highlight:restart') {
-      scheduleTransition(msg.payload || {});
+      prepareTransition(msg.payload || {});
     }
+  });
+
+  video.addEventListener('loadstart', () => {
+    if (pending) {
+      video.style.opacity = '0';
+      overlay.style.opacity = '.88';
+    }
+  });
+
+  video.addEventListener('loadeddata', () => {
+    startPendingTransition();
   });
 })();
