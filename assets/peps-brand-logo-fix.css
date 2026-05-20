@@ -1,6 +1,6 @@
-/* Final visible logo fix: use clean logo asset, smaller size, sweep inside logo only */
+/* Final visible logo fix: stable vector logo, like Sponsor Dock-style direct asset usage */
 :root {
-  --peps-brand-logo-url: url("./peps-logo-clean.svg");
+  --peps-brand-logo-url: url("./peps-logo-vector.svg");
 }
 
 .peps-brand-header {
@@ -24,11 +24,7 @@
   position: relative !important;
   overflow: hidden !important;
   border-radius: 8px !important;
-  background-image: var(--peps-brand-logo-url) !important;
-  background-size: contain !important;
-  background-repeat: no-repeat !important;
-  background-position: center !important;
-  background-color: transparent !important;
+  background: var(--peps-brand-logo-url) center / contain no-repeat transparent !important;
   filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(255,90,0,.22)) !important;
 }
 
@@ -45,8 +41,6 @@
   transform: translateX(-150%) skewX(-14deg) !important;
   animation: pepsLogoSweepFixed 4.8s ease-in-out infinite !important;
   pointer-events: none !important;
-  -webkit-mask-image: none !important;
-  mask-image: none !important;
 }
 
 .peps-brand-logo::after {
