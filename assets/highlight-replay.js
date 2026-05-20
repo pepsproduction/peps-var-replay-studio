@@ -34,11 +34,13 @@
     speed: 1,
     playing: false,
     shuffleBag: [],
-    transition: 'fade'
+    transition: 'fade',
+    transitionDuration: 1
   };
 
   let objectUrl = null;
   let screenObjectUrl = null;
+  let transitionTimer = null;
 
   const els = {
     tabVar: $('#tabVarReplay'),
@@ -70,6 +72,9 @@
   function niceRate(value) {
     const n = Number(value) || 1;
     return n >= 1 ? `${n.toFixed(1)}x` : `${n.toFixed(2)}x`;
+  }
+  function niceSeconds(value) {
+    return `${(Number(value) || 1).toFixed(1)}s`;
   }
   function escapeHtml(text) {
     return String(text).replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
@@ -125,13 +130,23 @@
       <div id="highlightTransitionGrid" class="highlight-transition-grid">
         ${TRANSITIONS.map(([id, label]) => `<button type="button" data-highlight-transition="${id}" class="${id === state.transition ? 'active' : ''}">${label}</button>`).join('')}
       </div>
+      <div class="highlight-transition-duration-head" style="margin-top:10px">
+        <span>DURATION</span>
+        <strong id="highlightTransitionDurationLabel">1.0s</strong>
+      </div>
+      <input id="highlightTransitionDurationRange" type="range" min="0.5" max="5" step="0.1" value="1" />
     `;
     speedCard.insertAdjacentElement('afterend', card);
     card.addEventListener('click', (event) => {
       const button = event.target.closest('[data-highlight-transition]');
       if (!button) return;
       state.transition = button.dataset.highlightTransition || 'fade';
-      post('highlight:transition', { transition: state.transition });
+      post('highlight:transition', { transition: state.transition, transitionDuration: state.transitionDuration });
+      render();
+    });
+    $('#highlightTransitionDurationRange')?.addEventListener('input', (event) => {
+      state.transitionDuration = clamp(Number(event.target.value) || 1, 0.5, 5);
+      post('highlight:transition', { transition: state.transition, transitionDuration: state.transitionDuration });
       render();
     });
   }
@@ -158,7 +173,13 @@
     els.video.src = objectUrl;
     els.video.load();
     els.video.playbackRate = state.speed;
-    post('highlight:clip', { clip: { name: clip.name, type: clip.type, file: clip.file }, speed: state.speed, playing: autoplay, transition: state.transition });
+    post('highlight:clip', {
+      clip: { name: clip.name, type: clip.type, file: clip.file },
+      speed: state.speed,
+      playing: autoplay,
+      transition: state.transition,
+      transitionDuration: state.transitionDuration
+    });
     render();
     if (autoplay) play();
   }
@@ -192,7 +213,12 @@
     render();
   }
   function pause() { state.playing = false; els.video?.pause(); post('highlight:pause'); render(); }
-  function restart() { if (!els.video || state.currentIndex < 0) return; els.video.currentTime = 0; post('highlight:restart', { speed: state.speed, transition: state.transition }); if (state.playing) play(); }
+  function restart() {
+    if (!els.video || state.currentIndex < 0) return;
+    els.video.currentTime = 0;
+    post('highlight:restart', { speed: state.speed, transition: state.transition, transitionDuration: state.transitionDuration });
+    if (state.playing) play();
+  }
   function goToIndex(index, autoplay = state.playing) { if (index < 0 || index >= state.clips.length) { pause(); return; } state.currentIndex = index; loadCurrent({ autoplay }); }
   function next() { goToIndex(getNextIndex(), state.playing); }
   function prev() { goToIndex(getPrevIndex(), state.playing); }
@@ -234,6 +260,10 @@
     document.querySelectorAll('[data-highlight-transition]').forEach((b) => b.classList.toggle('active', b.dataset.highlightTransition === state.transition));
     const label = $('#highlightTransitionLabel');
     if (label) label.textContent = TRANSITIONS.find(([id]) => id === state.transition)?.[1] || 'Fade';
+    const durationRange = $('#highlightTransitionDurationRange');
+    const durationLabel = $('#highlightTransitionDurationLabel');
+    if (durationRange) durationRange.value = String(state.transitionDuration);
+    if (durationLabel) durationLabel.textContent = niceSeconds(state.transitionDuration);
     const link = $('#linkInputHighlight');
     if (link) link.value = highlightSourceUrl();
     renderPlaylist();
@@ -265,27 +295,48 @@
   function transitionClass(type) {
     return ({ 'fade': 'ht-fade-in', 'slide-left': 'ht-slide-left-in', 'slide-right': 'ht-slide-right-in', 'zoom-pop': 'ht-zoom-pop-in', 'flash-cut': 'ht-flash-cut-in', 'blur-sweep': 'ht-blur-sweep-in', 'glitch': 'ht-glitch-in' })[type] || 'ht-fade-in';
   }
-  function startTransition(type) {
+  function armTransition(type, duration) {
     const video = els.screenVideo;
     if (!video) return;
+    if (transitionTimer) clearTimeout(transitionTimer);
+    const safeDuration = clamp(Number(duration) || 1, 0.5, 5);
     clearTransitionClasses(video);
+    video.style.setProperty('--highlight-transition-duration', `${safeDuration}s`);
     video.classList.add('highlight-transition', transitionClass(type));
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      video.classList.remove(transitionClass(type));
-      setTimeout(() => video.classList.remove('highlight-transition'), 520);
-    }));
+    // force style flush so the starting state is applied before reveal
+    void video.offsetWidth;
   }
-  function loadScreenClip(file, meta = {}, autoplay = false, transition = 'fade') {
+  function revealTransition(type, duration) {
+    const video = els.screenVideo;
+    if (!video) return;
+    const safeDuration = clamp(Number(duration) || 1, 0.5, 5);
+    requestAnimationFrame(() => {
+      video.classList.remove(transitionClass(type));
+      transitionTimer = setTimeout(() => {
+        video.classList.remove('highlight-transition');
+      }, Math.ceil(safeDuration * 1000) + 120);
+    });
+  }
+  function loadScreenClip(file, meta = {}, autoplay = false, transition = 'fade', transitionDuration = 1) {
     if (!isHighlightScreen || !els.screenVideo || !file) return;
     if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
     screenObjectUrl = URL.createObjectURL(file);
-    startTransition(transition);
+    state.transition = transition || state.transition;
+    state.transitionDuration = clamp(Number(transitionDuration) || state.transitionDuration, 0.5, 5);
+    armTransition(state.transition, state.transitionDuration);
     els.screenVideo.pause();
     els.screenVideo.src = screenObjectUrl;
     els.screenVideo.load();
     els.screenVideo.playbackRate = state.speed;
     setScreenStatus(`Highlight: ${meta.name || file.name || 'clip'}`);
-    if (autoplay) setTimeout(() => els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback')), 120);
+    const reveal = () => {
+      revealTransition(state.transition, state.transitionDuration);
+      if (autoplay) els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
+    };
+    els.screenVideo.addEventListener('loadeddata', reveal, { once: true });
+    setTimeout(() => {
+      if (els.screenVideo.readyState >= 2) revealTransition(state.transition, state.transitionDuration);
+    }, 300);
   }
   function setupScreen() {
     if (!isHighlightScreen || !bc) return;
@@ -294,11 +345,28 @@
       const msg = event.data || {};
       if (!msg.type || msg.source === 'highlight-screen') return;
       const payload = msg.payload || {};
-      if (msg.type === 'highlight:transition') state.transition = payload.transition || state.transition;
-      if (msg.type === 'highlight:clip' && payload.clip?.file) { state.speed = Number(payload.speed) || state.speed; state.transition = payload.transition || state.transition; loadScreenClip(payload.clip.file, payload.clip, !!payload.playing, state.transition); }
-      if (msg.type === 'highlight:play') { state.speed = Number(payload.speed) || state.speed; if (els.screenVideo) { els.screenVideo.playbackRate = state.speed; els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback')); } }
+      if (msg.type === 'highlight:transition') {
+        state.transition = payload.transition || state.transition;
+        state.transitionDuration = clamp(Number(payload.transitionDuration) || state.transitionDuration, 0.5, 5);
+      }
+      if (msg.type === 'highlight:clip' && payload.clip?.file) {
+        state.speed = Number(payload.speed) || state.speed;
+        loadScreenClip(payload.clip.file, payload.clip, !!payload.playing, payload.transition || state.transition, payload.transitionDuration || state.transitionDuration);
+      }
+      if (msg.type === 'highlight:play') {
+        state.speed = Number(payload.speed) || state.speed;
+        if (els.screenVideo) { els.screenVideo.playbackRate = state.speed; els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback')); }
+      }
       if (msg.type === 'highlight:pause') els.screenVideo?.pause();
-      if (msg.type === 'highlight:restart' && els.screenVideo) { startTransition(payload.transition || state.transition); els.screenVideo.currentTime = 0; els.screenVideo.playbackRate = Number(payload.speed) || state.speed; els.screenVideo.play().catch(() => {}); }
+      if (msg.type === 'highlight:restart' && els.screenVideo) {
+        state.transition = payload.transition || state.transition;
+        state.transitionDuration = clamp(Number(payload.transitionDuration) || state.transitionDuration, 0.5, 5);
+        armTransition(state.transition, state.transitionDuration);
+        els.screenVideo.currentTime = 0;
+        els.screenVideo.playbackRate = Number(payload.speed) || state.speed;
+        revealTransition(state.transition, state.transitionDuration);
+        els.screenVideo.play().catch(() => {});
+      }
       if (msg.type === 'highlight:speed') { state.speed = Number(payload.speed) || 1; if (els.screenVideo) els.screenVideo.playbackRate = state.speed; }
       if (msg.type === 'highlight:clear') { els.screenVideo?.pause(); els.screenVideo?.removeAttribute('src'); setScreenStatus('Highlight cleared'); }
     });
