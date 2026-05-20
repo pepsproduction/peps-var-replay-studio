@@ -327,3 +327,30 @@ body.is-highlight-screen .video-wrapper {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Highlight Transition Overlay styles for Web Animations API */
+.highlight-transition-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  background: #000;
+  will-change: opacity, transform, filter;
+}
+
+.highlight-transition-overlay.flash {
+  background: radial-gradient(circle at center, rgba(255,255,255,.98), rgba(255,120,0,.62) 42%, rgba(0,0,0,0) 72%);
+  mix-blend-mode: screen;
+}
+
+.highlight-transition-overlay.blur {
+  background: linear-gradient(110deg, transparent 0 30%, rgba(255,90,0,.55) 45%, rgba(255,255,255,.85) 50%, rgba(255,90,0,.45) 55%, transparent 70% 100%);
+  mix-blend-mode: screen;
+  filter: blur(10px);
+}
+
+.highlight-transition-overlay.wipe {
+  background: linear-gradient(90deg, rgba(0,0,0,1), rgba(255,90,0,.82), rgba(0,0,0,1));
+}
+

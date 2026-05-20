@@ -3,7 +3,9 @@
 
   const $ = (selector) => document.querySelector(selector);
   const params = new URLSearchParams(location.search);
-  const mode = params.get('mode') === 'screen' ? 'screen' : 'control';
+  const pageMode = params.get('mode') || 'control';
+  if (pageMode === 'highlight-screen') return; // Exit early for highlight screen to prevent conflicts
+  const mode = pageMode === 'screen' ? 'screen' : 'control';
 
   const CHANNEL = 'peps-var-replay-studio-v1-1';
   const DB_NAME = 'peps-var-replay-studio-db';
@@ -11,7 +13,6 @@
   const CLIP_ID = 'active-clip';
   const bc = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
 
-  injectControlPreviewFixCss();
   document.body.classList.toggle('is-screen', mode === 'screen');
   document.body.classList.toggle('is-control', mode !== 'screen');
   if (mode === 'control') ensureControlVideo();
@@ -102,55 +103,7 @@
   let syncTimer = null;
   let pendingSeek = null;
 
-  function injectControlPreviewFixCss() {
-    if ($('#peps-var-replay-hotfix-css')) return;
-    const style = document.createElement('style');
-    style.id = 'peps-var-replay-hotfix-css';
-    style.textContent = `
-      body.is-control #dropZone.drop-zone {
-        min-height: 128px;
-        padding: 0;
-        overflow: hidden;
-      }
-      body.is-control #dropZone.drop-zone.ready { min-height: 184px; }
-      .control-video {
-        display: none;
-        width: 100%;
-        height: 184px;
-        object-fit: contain;
-        background: #000;
-        transform-origin: center center;
-        pointer-events: none;
-      }
-      body.is-control #dropZone.ready .control-video { display: block; }
-      .drop-overlay {
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        padding: 15px;
-        background: rgba(43,43,43,.96);
-        transition: .18s ease;
-      }
-      body.is-control #dropZone.ready .drop-overlay {
-        inset: auto 6px 6px 6px;
-        align-items: flex-start;
-        justify-content: flex-start;
-        text-align: left;
-        padding: 6px 8px;
-        border-radius: 5px;
-        background: rgba(0,0,0,.68);
-        color: #d6ffd6;
-      }
-      body.is-control #dropZone.ready .drop-icon { display: none; }
-      body.is-control #dropZone.loading { border-color: #ffca28; color: #ffca28; }
-      body.is-control #dropZone.ready { border-color: #44aa44; color: #d6ffd6; }
-    `;
-    document.head.appendChild(style);
-  }
+
 
   function ensureControlVideo() {
     const dz = $('#dropZone');
@@ -266,8 +219,8 @@
     video.load();
     video.playbackRate = state.speed;
     video.muted = mode === 'screen' ? !state.screenAudio : true;
-    setStatus(mode === 'screen' ? 'Clip loaded on Screen' : `Ready: ${state.clipName}`);
-    if (mode === 'control') setDropState('ready', `Ready: ${state.clipName}`, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
+    setStatus(mode === 'screen' ? 'Clip loaded on Screen' : state.clipName);
+    if (mode === 'control') setDropState('ready', state.clipName, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
     render();
   }
 
@@ -413,11 +366,13 @@
 
   function applyTransform() {
     if (!video) return;
-    const maxX = ((state.zoom - 1) / Math.max(state.zoom, 1)) * 50;
-    const maxY = ((state.zoom - 1) / Math.max(state.zoom, 1)) * 50;
-    const translateX = (state.panXPct / 100) * maxX;
-    const translateY = (state.panYPct / 100) * maxY;
-    video.style.transform = `translate(${translateX}%, ${translateY}%) scale(${state.zoom})`;
+    const zoom = clamp(Number(state.zoom) || 1, 1, 10);
+    const maxX = (zoom - 1) * 50;
+    const maxY = (zoom - 1) * 50;
+    const translateX = -(clamp(state.panXPct, -100, 100) / 100) * maxX;
+    const translateY = -(clamp(state.panYPct, -100, 100) / 100) * maxY;
+    video.style.transformOrigin = 'center center';
+    video.style.transform = `translate(${translateX}%, ${translateY}%) scale(${zoom})`;
   }
 
   function setA(time = state.currentTime) {
@@ -813,6 +768,7 @@
   function setupKeyboard() {
     document.addEventListener('keydown', (event) => {
       if (mode !== 'control') return;
+      if (document.body.dataset.replayMode !== 'var') return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
       if (event.code === 'Space') {
         event.preventDefault();
@@ -871,16 +827,28 @@
     });
   }
 
+  let lastDirectBlobVersion = 0;
+  let lastDirectBlobAt = 0;
+
   function setupBroadcast() {
     if (!bc) return;
     bc.addEventListener('message', async (event) => {
       const msg = event.data || {};
       if (!msg.type || msg.source === mode) return;
       if (mode === 'screen' && msg.type === 'clip:blob' && msg.payload?.blob) {
+        lastDirectBlobVersion = msg.payload.meta?.updatedAt || 0;
+        lastDirectBlobAt = Date.now();
         await loadBlob(msg.payload.blob, msg.payload.meta || {});
       }
       if (mode === 'screen' && msg.type === 'state') await applyIncoming(msg.payload);
-      if (mode === 'screen' && msg.type === 'clip:update') await loadSaved();
+      if (mode === 'screen' && msg.type === 'clip:update') {
+        const version = msg.payload?.version || 0;
+        const isSameClip = version && version === lastDirectBlobVersion;
+        const isImmediateDuplicate = Date.now() - lastDirectBlobAt < 2500;
+        if (!(isSameClip && isImmediateDuplicate)) {
+          await loadSaved();
+        }
+      }
       if (mode === 'control' && msg.type === 'screen:ready') broadcast('screen-ready');
     });
   }
