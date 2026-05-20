@@ -199,7 +199,9 @@ body[data-replay-mode="highlight"] .highlight-panel {
   accent-color: var(--peps-orange, #ff5a00);
 }
 
-.highlight-speed-head {
+.highlight-speed-head,
+.highlight-transition-title,
+.highlight-transition-duration-head {
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -210,11 +212,14 @@ body[data-replay-mode="highlight"] .highlight-panel {
   margin-bottom: 6px;
 }
 
-.highlight-speed-head strong {
+.highlight-speed-head strong,
+.highlight-transition-title strong,
+.highlight-transition-duration-head strong {
   color: #ffbf9b;
 }
 
-#highlightSpeedRange {
+#highlightSpeedRange,
+#highlightTransitionDurationRange {
   width: 100%;
   accent-color: var(--peps-orange, #ff5a00);
 }
@@ -229,21 +234,6 @@ body[data-replay-mode="highlight"] .highlight-panel {
 
 .highlight-transition-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.highlight-transition-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--peps-muted, #b8b8b8);
-  font-family: "Chakra Petch", sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.highlight-transition-title strong {
-  color: #ffbf9b;
 }
 
 .highlight-playlist {
@@ -314,7 +304,11 @@ body.is-highlight-screen .video-wrapper {
 }
 
 #mainVideo.highlight-transition {
-  transition: opacity .32s ease, transform .42s cubic-bezier(.2,.8,.2,1), filter .42s ease;
+  --highlight-transition-duration: 1s;
+  transition:
+    opacity var(--highlight-transition-duration) ease,
+    transform var(--highlight-transition-duration) cubic-bezier(.2,.8,.2,1),
+    filter var(--highlight-transition-duration) ease;
 }
 
 #mainVideo.ht-fade-in { opacity: 0; transform: scale(1.01); }
