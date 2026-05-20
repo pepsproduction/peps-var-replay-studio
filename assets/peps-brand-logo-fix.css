@@ -1,11 +1,11 @@
-/* Header logo: supplied Peps Production style, compact and safe */
+/* Header logo: exact uploaded Peps Production image, compact and safe */
 :root {
   --peps-brand-logo-url: url("./peps-logo-vector.svg");
 }
 
 .peps-brand-header {
-  width: min(330px, 78vw) !important;
-  min-height: 74px !important;
+  width: min(340px, 80vw) !important;
+  min-height: 80px !important;
   margin: 0 auto !important;
   padding: 5px 8px 6px !important;
   border-radius: 16px !important;
@@ -18,15 +18,15 @@
 }
 
 .peps-brand-logo {
-  width: min(248px, 64vw) !important;
-  aspect-ratio: 900 / 323 !important;
+  width: min(252px, 66vw) !important;
+  aspect-ratio: 900 / 349 !important;
   margin: 0 auto !important;
   display: block !important;
   position: relative !important;
   overflow: hidden !important;
-  border-radius: 6px !important;
+  border-radius: 4px !important;
   background: var(--peps-brand-logo-url) center / contain no-repeat transparent !important;
-  filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(255,90,0,.24)) !important;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(255,90,0,.20)) !important;
   flex: 0 0 auto !important;
 }
 
@@ -53,9 +53,9 @@
   bottom: -4px !important;
   height: 8px !important;
   border-radius: 999px !important;
-  background: radial-gradient(ellipse at center, rgba(255,90,0,.26), transparent 70%) !important;
+  background: radial-gradient(ellipse at center, rgba(255,90,0,.24), transparent 70%) !important;
   filter: blur(7px) !important;
-  opacity: .72 !important;
+  opacity: .7 !important;
   pointer-events: none !important;
 }
 
@@ -71,8 +71,8 @@
 }
 
 .app-header {
-  min-height: 88px !important;
-  height: 88px !important;
+  min-height: 92px !important;
+  height: 92px !important;
   padding: 6px 8px 6px !important;
   position: relative !important;
   z-index: 5 !important;
@@ -80,7 +80,7 @@
 }
 
 .control-mode {
-  height: calc(100vh - 88px) !important;
+  height: calc(100vh - 92px) !important;
   padding-top: 12px !important;
   position: relative !important;
   z-index: 1 !important;
@@ -106,16 +106,16 @@ body.is-highlight-screen .screen-only {
 }
 
 @media (max-width: 560px) {
-  .peps-brand-header { width: min(290px, 82vw) !important; min-height: 68px !important; gap: 4px !important; }
-  .peps-brand-logo { width: min(224px, 68vw) !important; }
+  .peps-brand-header { width: min(300px, 84vw) !important; min-height: 72px !important; gap: 4px !important; }
+  .peps-brand-logo { width: min(230px, 70vw) !important; }
   .peps-brand-subline { font-size: 7px !important; letter-spacing: 1px !important; }
-  .app-header { min-height: 82px !important; height: 82px !important; }
-  .control-mode { height: calc(100vh - 82px) !important; }
+  .app-header { min-height: 86px !important; height: 86px !important; }
+  .control-mode { height: calc(100vh - 86px) !important; }
 }
 
 @media (max-width: 330px) {
-  .peps-brand-header { min-height: 60px !important; }
-  .peps-brand-logo { width: min(196px, 70vw) !important; }
-  .app-header { min-height: 74px !important; height: 74px !important; }
-  .control-mode { height: calc(100vh - 74px) !important; }
+  .peps-brand-header { min-height: 64px !important; }
+  .peps-brand-logo { width: min(202px, 72vw) !important; }
+  .app-header { min-height: 78px !important; height: 78px !important; }
+  .control-mode { height: calc(100vh - 78px) !important; }
 }
