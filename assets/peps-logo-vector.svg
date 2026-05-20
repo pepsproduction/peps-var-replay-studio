@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 323" width="900" height="323" role="img" aria-label="PEPS LIVE PRODUCTION">
+  <rect width="900" height="323" fill="none"/>
+  <circle cx="40" cy="51" r="40" fill="#ff5a00"/>
+  <text x="84" y="176" font-family="Arial Black, Impact, Helvetica, Arial, sans-serif" font-size="170" font-weight="900" font-style="italic" letter-spacing="-7" fill="#000000">PEPS</text>
+  <text x="682" y="190" font-family="Impact, Arial Narrow, Arial, sans-serif" font-size="150" font-weight="900" letter-spacing="10" fill="#ff5a00">LIVE</text>
+  <rect x="6" y="202" width="862" height="106" fill="#ff5a00"/>
+  <text x="24" y="292" font-family="Arial Black, Impact, Helvetica, Arial, sans-serif" font-size="82" font-weight="900" letter-spacing="1" fill="#ffffff">PRODUCTION</text>
+</svg>
