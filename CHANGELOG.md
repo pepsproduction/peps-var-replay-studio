@@ -1,5 +1,13 @@
 # Changelog
 
+## V1.4.0
+
+- แก้อาการกระพริบตอนเปิด/เปลี่ยนคลิปใน VAR Screen ด้วยวิดีโอบัฟเฟอร์สำรองที่โหลดคลิปให้พร้อมก่อนสลับภาพ
+- ปรับการโหลดคลิปให้รักษา zoom, pan, audio และเวลาปัจจุบันให้ต่อเนื่องหลังสลับบัฟเฟอร์
+- แก้ timestamp ของคลิปให้ตรงกันทั้ง IndexedDB, Control state และ Broadcast เพื่อลดการโหลดซ้ำ
+- เพิ่ม Source Setup UI ใน Get Link สำหรับคัดลอก OBS Browser Source และ Custom Browser Dock ได้จากหน้าต่างเดียว
+- เพิ่ม asset version query `v=1.4.0` เพื่อลดปัญหา OBS/Browser cache ไฟล์เก่า
+
 ## V1.3.0
 
 - เพิ่ม live timeline scrubbing ให้เฟรมวิดีโอและ Screen ขยับตามระหว่างลากเวลา

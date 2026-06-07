@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/var-replay.css?v=1.3.0" />
+  <link rel="stylesheet" href="assets/var-replay.css?v=1.4.0" />
   <link rel="stylesheet" href="assets/pepslive-theme.css" />
   <link rel="stylesheet" href="assets/highlight-replay.css" />
   <link rel="stylesheet" href="assets/peps-brand-logo.css" />
@@ -42,7 +42,7 @@
       <div class="peps-brand-subline">VAR • REPLAY • HIGHLIGHT</div>
     </div>
     <div class="logo-header-main">OBS VAR REPLAY</div>
-    <div class="logo-header-sub">PEPS CONTROL CENTER V1.3</div>
+    <div class="logo-header-sub">PEPS CONTROL CENTER V1.4</div>
   </header>
 
   <main id="controlsUi" class="control-mode control-only" aria-label="VAR replay control panel">
@@ -219,27 +219,50 @@
 
   <main id="screenView" class="screen-mode screen-only" aria-label="OBS screen output">
     <div id="videoWrapper" class="video-wrapper">
-      <video id="mainVideo" muted playsinline></video>
+      <video id="mainVideo" class="screen-video-buffer active" muted playsinline></video>
+      <video id="mainVideoAlt" class="screen-video-buffer" muted playsinline></video>
       <div id="screenStatus" class="screen-status">Waiting for Control…</div>
     </div>
   </main>
 
   <div id="modalLinks" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="linkTitle">
-    <div class="modal">
+    <div class="modal link-modal">
       <button class="modal-close" id="btnCloseLinks" type="button" aria-label="Close">×</button>
       <h2 id="linkTitle">Graphic Link (Screen)</h2>
-      <p>สำหรับใส่ใน OBS Browser Source</p>
-      <div class="copy-group">
-        <input id="linkInputScreen" class="copy-input" type="text" readonly />
-        <button id="btnCopyScreen" type="button">Copy</button>
+      <p>Copy URL หรือ Source Setup ไปสร้างใน OBS ได้ทันที</p>
+      <div class="link-source-grid">
+        <section class="link-source-card">
+          <div class="source-card-head">
+            <span>SCREEN OUTPUT</span>
+            <strong>Browser Source</strong>
+          </div>
+          <div class="copy-group">
+            <input id="linkInputScreen" class="copy-input" type="text" readonly />
+            <button id="btnCopyScreen" type="button">Copy URL</button>
+          </div>
+          <label class="source-copy-label" for="sourceInputScreen">OBS Source Setup</label>
+          <div class="copy-group source-copy-group">
+            <textarea id="sourceInputScreen" class="copy-input source-input" readonly></textarea>
+            <button id="btnCopyScreenSource" type="button">Copy Source</button>
+          </div>
+        </section>
+        <section class="link-source-card">
+          <div class="source-card-head">
+            <span>CONTROL DOCK</span>
+            <strong>Custom Browser Dock</strong>
+          </div>
+          <div class="copy-group">
+            <input id="linkInputControl" class="copy-input" type="text" readonly />
+            <button id="btnCopyControl" type="button">Copy URL</button>
+          </div>
+          <label class="source-copy-label" for="sourceInputControl">OBS Dock Setup</label>
+          <div class="copy-group source-copy-group">
+            <textarea id="sourceInputControl" class="copy-input source-input" readonly></textarea>
+            <button id="btnCopyControlSource" type="button">Copy Source</button>
+          </div>
+        </section>
       </div>
       <div id="copyMsg" class="copy-msg">Copied!</div>
-      <hr />
-      <p>Control Link สำหรับเปิดเป็น OBS Custom Browser Dock</p>
-      <div class="copy-group">
-        <input id="linkInputControl" class="copy-input" type="text" readonly />
-        <button id="btnCopyControl" type="button">Copy</button>
-      </div>
     </div>
   </div>
 
@@ -258,11 +281,11 @@
           <p>ออกแบบสำหรับเปิดเป็น Dock + Browser Source ใช้งานไวในสนามจริง</p>
         </div>
       </div>
-      <div class="version-note">Developed for PepsLive · V1.3</div>
+      <div class="version-note">Developed for PepsLive · V1.4</div>
     </div>
   </div>
 
-  <script src="assets/var-replay.js?v=1.3.0"></script>
+  <script src="assets/var-replay.js?v=1.4.0"></script>
   <script src="assets/highlight-replay.js"></script>
 </body>
 </html>

@@ -62,6 +62,7 @@
     videoWrapper: $('#videoWrapper'),
     controlVideo: $('#controlVideo'),
     screenVideo: $('#screenVideo') || $('#mainVideo'),
+    screenVideoAlt: $('#mainVideoAlt'),
     screenStatus: $('#screenStatus'),
     modalLinks: $('#modalLinks'),
     modalSponsor: $('#modalSponsor'),
@@ -71,12 +72,18 @@
     btnCloseSponsor: $('#btnCloseSponsor'),
     linkInputScreen: $('#linkInputScreen'),
     linkInputControl: $('#linkInputControl'),
+    sourceInputScreen: $('#sourceInputScreen'),
+    sourceInputControl: $('#sourceInputControl'),
     btnCopyScreen: $('#btnCopyScreen'),
     btnCopyControl: $('#btnCopyControl'),
+    btnCopyScreenSource: $('#btnCopyScreenSource'),
+    btnCopyControlSource: $('#btnCopyControlSource'),
     copyMsg: $('#copyMsg')
   };
 
-  const video = mode === 'screen' ? els.screenVideo : els.controlVideo;
+  let video = mode === 'screen' ? els.screenVideo : els.controlVideo;
+  const screenBuffers = mode === 'screen' ? [els.screenVideo, els.screenVideoAlt].filter(Boolean) : [];
+  let activeScreenBuffer = 0;
 
   const state = {
     hasClip: false,
@@ -107,6 +114,7 @@
   let timelineWasPlaying = false;
   let pendingScrubTime = null;
   let scrubFrame = null;
+  let loadingClip = null;
 
 
 
@@ -144,8 +152,14 @@
   }
 
   function post(type, payload = {}) {
-    if (!bc) return;
-    bc.postMessage({ type, payload, source: mode, at: Date.now() });
+    if (!bc) return false;
+    try {
+      bc.postMessage({ type, payload, source: mode, at: Date.now() });
+      return true;
+    } catch (err) {
+      console.warn('Broadcast failed', type, err);
+      return false;
+    }
   }
 
   function screenUrl() {
@@ -162,6 +176,28 @@
     return url.toString();
   }
 
+  function screenSourceText() {
+    return [
+      'Source Name: Peps VAR Screen',
+      'Type: Browser Source',
+      `URL: ${screenUrl()}`,
+      'Width: 1920',
+      'Height: 1080',
+      'OBS: Keep source active when hidden = ON'
+    ].join('\n');
+  }
+
+  function controlSourceText() {
+    return [
+      'Dock Name: Peps VAR Control',
+      'Type: Custom Browser Dock',
+      `URL: ${controlUrl()}`,
+      'Recommended Width: 420-520',
+      'Recommended Height: 900',
+      'Use this dock to load clips and control replay'
+    ].join('\n');
+  }
+
   function openDB() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
@@ -174,7 +210,7 @@
     });
   }
 
-  async function saveClip(file) {
+  async function saveClip(file, updatedAt = Date.now()) {
     const db = await openDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(DB_STORE, 'readwrite');
@@ -183,7 +219,7 @@
         blob: file,
         name: file.name || 'replay-video',
         type: file.type || 'video/mp4',
-        updatedAt: Date.now()
+        updatedAt
       });
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
@@ -211,21 +247,125 @@
     if (els.dropText) els.dropText.textContent = subtitle;
   }
 
+  function waitForVideoReady(target) {
+    return new Promise((resolve, reject) => {
+      if (!target) {
+        reject(new Error('Video element missing'));
+        return;
+      }
+      if (target.readyState >= 1 && Number.isFinite(target.duration)) {
+        resolve();
+        return;
+      }
+      const cleanup = () => {
+        target.removeEventListener('loadedmetadata', onReady);
+        target.removeEventListener('canplay', onReady);
+        target.removeEventListener('error', onError);
+        clearTimeout(timer);
+      };
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(target.error || new Error('Video load failed'));
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, 5000);
+      target.addEventListener('loadedmetadata', onReady, { once: true });
+      target.addEventListener('canplay', onReady, { once: true });
+      target.addEventListener('error', onError, { once: true });
+    });
+  }
+
+  async function prepareVideoSource(target, url) {
+    target.preload = 'auto';
+    target.muted = mode === 'screen' ? !state.screenAudio : true;
+    target.playbackRate = state.speed;
+    target.src = url;
+    target.load();
+    await waitForVideoReady(target);
+  }
+
+  function resetInactiveScreenBuffer(target) {
+    if (!target) return;
+    target.pause();
+    target.removeAttribute('src');
+    target.load();
+  }
+
   async function loadBlob(blob, meta = {}) {
     if (!blob || !video) return;
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(blob);
-    pendingSeek = Number.isFinite(state.currentTime) ? state.currentTime : 0;
+    const token = Symbol('clip-load');
+    loadingClip = token;
+    const nextUrl = URL.createObjectURL(blob);
+    const previousUrl = objectUrl;
+    const nextTime = Number.isFinite(state.currentTime) ? state.currentTime : 0;
+    const targetVideo = mode === 'screen' && screenBuffers.length > 1
+      ? screenBuffers[activeScreenBuffer === 0 ? 1 : 0]
+      : video;
+    pendingSeek = nextTime;
+
+    try {
+      await prepareVideoSource(targetVideo, nextUrl);
+    } catch (err) {
+      if (loadingClip === token) loadingClip = null;
+      pendingSeek = null;
+      if (targetVideo.src === nextUrl) resetInactiveScreenBuffer(targetVideo);
+      URL.revokeObjectURL(nextUrl);
+      throw err;
+    }
+
+    if (loadingClip !== token) {
+      if (targetVideo.src === nextUrl) resetInactiveScreenBuffer(targetVideo);
+      URL.revokeObjectURL(nextUrl);
+      return;
+    }
+
+    objectUrl = nextUrl;
     state.hasClip = true;
     state.clipName = meta.name || 'replay-video';
     state.clipVersion = meta.updatedAt || Date.now();
-    video.pause();
-    video.src = objectUrl;
-    video.load();
-    video.playbackRate = state.speed;
-    video.muted = mode === 'screen' ? !state.screenAudio : true;
+    state.duration = Number.isFinite(targetVideo.duration) ? targetVideo.duration : state.duration;
+    state.currentTime = clamp(nextTime, 0, state.duration || nextTime);
+
+    if (mode === 'screen' && screenBuffers.length > 1) {
+      const previousVideo = video;
+      video = targetVideo;
+      activeScreenBuffer = screenBuffers.indexOf(targetVideo);
+      video.currentTime = state.currentTime;
+      video.playbackRate = state.speed;
+      video.muted = !state.screenAudio;
+      applyTransform();
+      renderScreenOptions();
+      targetVideo.classList.add('active');
+      previousVideo?.classList.remove('active');
+      if (state.isPlaying) {
+        video.play().catch(() => setStatus('Click Screen once to allow playback'));
+      } else {
+        video.pause();
+      }
+      setTimeout(() => {
+        if (previousVideo && previousVideo !== video && !previousVideo.classList.contains('active')) {
+          resetInactiveScreenBuffer(previousVideo);
+        }
+        if (previousUrl && previousUrl !== objectUrl) URL.revokeObjectURL(previousUrl);
+      }, 120);
+    } else {
+      video = targetVideo;
+      video.currentTime = state.currentTime;
+      video.playbackRate = state.speed;
+      video.muted = mode === 'screen' ? !state.screenAudio : true;
+      if (previousUrl && previousUrl !== objectUrl) URL.revokeObjectURL(previousUrl);
+    }
+
+    pendingSeek = null;
     setStatus(mode === 'screen' ? 'Clip loaded on Screen' : state.clipName);
     if (mode === 'control') setDropState('ready', state.clipName, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
+    loadingClip = null;
     render();
   }
 
@@ -258,8 +398,9 @@
     state.zoom = 1;
     state.panXPct = 0;
     state.panYPct = 0;
-    await saveClip(file);
-    await loadBlob(file, { name: file.name, type: file.type, updatedAt: Date.now() });
+    const updatedAt = Date.now();
+    await saveClip(file, updatedAt);
+    await loadBlob(file, { name: file.name, type: file.type, updatedAt });
     post('clip:blob', { blob: file, meta: { name: file.name, type: file.type, updatedAt: state.clipVersion } });
     post('clip:update', { version: state.clipVersion, name: state.clipName });
     broadcast('file');
@@ -401,14 +542,16 @@
   }
 
   function applyTransform() {
-    if (!video) return;
+    const targets = mode === 'screen' && screenBuffers.length ? screenBuffers : [video].filter(Boolean);
     const zoom = clamp(Number(state.zoom) || 1, 1, 10);
     const maxX = (zoom - 1) * 50;
     const maxY = (zoom - 1) * 50;
     const translateX = -(clamp(state.panXPct, -100, 100) / 100) * maxX;
     const translateY = -(clamp(state.panYPct, -100, 100) / 100) * maxY;
-    video.style.transformOrigin = 'center center';
-    video.style.transform = `translate(${translateX}%, ${translateY}%) scale(${zoom})`;
+    targets.forEach((target) => {
+      target.style.transformOrigin = 'center center';
+      target.style.transform = `translate(${translateX}%, ${translateY}%) scale(${zoom})`;
+    });
   }
 
   function setA(time = state.currentTime) {
@@ -452,7 +595,8 @@
     state.viewWidth = clamp(Number(state.viewWidth) || 1, 0.01, 1);
 
     if (mode === 'screen' && state.clipVersion && state.clipVersion !== prevVersion) {
-      await loadSaved();
+      const isDirectDuplicate = state.clipVersion === lastDirectBlobVersion && Date.now() - lastDirectBlobAt < 2500;
+      if (!isDirectDuplicate) await loadSaved();
     }
 
     if (video) {
@@ -560,7 +704,10 @@
     if (els.screenAudio) els.screenAudio.checked = state.screenAudio;
     if (els.showStatus) els.showStatus.checked = state.showStatus;
     if (els.autoSync) els.autoSync.checked = state.autoSync;
-    if (video) video.muted = mode === 'screen' ? !state.screenAudio : true;
+    const targets = mode === 'screen' && screenBuffers.length ? screenBuffers : [video].filter(Boolean);
+    targets.forEach((target) => {
+      target.muted = mode === 'screen' ? !state.screenAudio : true;
+    });
     if (els.videoWrapper) {
       els.videoWrapper.classList.toggle('ready', state.hasClip && mode === 'screen' && !state.showStatus);
       els.videoWrapper.classList.toggle('hide-status', !state.showStatus);
@@ -570,6 +717,8 @@
   function renderLinks() {
     if (els.linkInputScreen) els.linkInputScreen.value = screenUrl();
     if (els.linkInputControl) els.linkInputControl.value = controlUrl();
+    if (els.sourceInputScreen) els.sourceInputScreen.value = screenSourceText();
+    if (els.sourceInputControl) els.sourceInputControl.value = controlSourceText();
   }
 
   function updateViewportFromState() {
@@ -647,6 +796,8 @@
     els.modalSponsor?.addEventListener('click', (event) => event.target === els.modalSponsor && closeModal(els.modalSponsor));
     els.btnCopyScreen?.addEventListener('click', () => copyValue(els.linkInputScreen));
     els.btnCopyControl?.addEventListener('click', () => copyValue(els.linkInputControl));
+    els.btnCopyScreenSource?.addEventListener('click', () => copyValue(els.sourceInputScreen));
+    els.btnCopyControlSource?.addEventListener('click', () => copyValue(els.sourceInputControl));
 
     setupTimelineDrag();
     setupNavigatorDrag();
@@ -848,41 +999,46 @@
     });
   }
 
-  function setupVideoEvents() {
-    if (!video) return;
-    video.addEventListener('loadedmetadata', () => {
-      state.duration = video.duration || 0;
+  function setupVideoEvents(target = video) {
+    if (!target) return;
+    target.addEventListener('loadedmetadata', () => {
+      if (target !== video) return;
+      state.duration = target.duration || 0;
       if (pendingSeek !== null) {
-        try { video.currentTime = clamp(pendingSeek, 0, state.duration || pendingSeek); } catch {}
+        try { target.currentTime = clamp(pendingSeek, 0, state.duration || pendingSeek); } catch {}
         pendingSeek = null;
       }
-      state.currentTime = video.currentTime || 0;
+      state.currentTime = target.currentTime || 0;
       state.hasClip = true;
-      video.playbackRate = state.speed;
+      target.playbackRate = state.speed;
       render();
       broadcast('metadata');
     });
-    video.addEventListener('timeupdate', () => {
-      if (!suppress) state.currentTime = video.currentTime || 0;
+    target.addEventListener('timeupdate', () => {
+      if (target !== video) return;
+      if (!suppress) state.currentTime = target.currentTime || 0;
       if (loopActive() && state.currentTime >= state.loopB - 0.025) {
-        video.currentTime = state.loopA;
+        target.currentTime = state.loopA;
         state.currentTime = state.loopA;
-        if (state.isPlaying) video.play().catch(() => {});
+        if (state.isPlaying) target.play().catch(() => {});
       }
       renderTimeline();
     });
-    video.addEventListener('play', () => {
+    target.addEventListener('play', () => {
+      if (target !== video) return;
       state.isPlaying = true;
       renderButtons();
       broadcast('video-play');
     });
-    video.addEventListener('pause', () => {
+    target.addEventListener('pause', () => {
+      if (target !== video) return;
       state.isPlaying = false;
       renderButtons();
       broadcast('video-pause');
     });
-    video.addEventListener('error', () => {
-      const err = video.error;
+    target.addEventListener('error', () => {
+      if (target !== video) return;
+      const err = target.error;
       setStatus(err ? `VIDEO ERROR ${err.code}` : 'VIDEO ERROR');
       console.warn('Video error', err);
     });
@@ -927,7 +1083,8 @@
   }
 
   async function init() {
-    setupVideoEvents();
+    const videoTargets = mode === 'screen' && screenBuffers.length ? screenBuffers : [video].filter(Boolean);
+    videoTargets.forEach((target) => setupVideoEvents(target));
     setupBroadcast();
     setupControl();
     render();
