@@ -1,6 +1,6 @@
 {
   "project": "Peps VAR Replay Studio",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "defaultMode": "control",
   "theme": {
     "primary": "#ff8a1c",
@@ -12,7 +12,7 @@
     "speedMin": 0.25,
     "speedMax": 2.0,
     "zoomMin": 1.0,
-    "zoomMax": 3.0
+    "zoomMax": 10.0
   },
   "obs": {
     "controlQuery": "?mode=control",

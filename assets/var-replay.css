@@ -351,13 +351,6 @@ input[type=range].v-slider {
   height: 82px;
   accent-color: var(--blue);
 }
-@supports (-webkit-appearance: slider-vertical) {
-  input[type=range].v-slider {
-    -webkit-appearance: slider-vertical;
-    writing-mode: initial;
-    direction: initial;
-  }
-}
 .pan-area-cont {
   flex: 1;
   display: flex;
@@ -376,6 +369,24 @@ input[type=range].v-slider {
   background-image: radial-gradient(#333 1px, transparent 1px);
   background-size: 10px 10px;
   touch-action: none;
+}
+.zoom-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.zoom-preset-row button {
+  min-height: 26px;
+  padding: 5px 4px;
+  border: 1px solid var(--line-2);
+  background: #262626;
+  color: #cfcfcf;
+  font-size: 10px;
+}
+.zoom-preset-row button.active {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #00131d;
 }
 .pan-grid {
   position: absolute;

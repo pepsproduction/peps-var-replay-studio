@@ -1,5 +1,13 @@
 # Changelog
 
+## V1.3.0
+
+- เพิ่ม live timeline scrubbing ให้เฟรมวิดีโอและ Screen ขยับตามระหว่างลากเวลา
+- ปรับ scrub ให้หยุดเล่นชั่วคราวตอนลาก และเล่นต่ออัตโนมัติเมื่อปล่อยเมาส์ถ้าก่อนหน้ากำลังเล่นอยู่
+- เพิ่มปุ่ม Zoom preset 1x / 2x / 5x / 10x
+- เพิ่ม mouse-wheel zoom และ double-click reset บน Pan & Zoom box
+- เพิ่ม asset version query `v=1.3.0` เพื่อลดปัญหา OBS/Browser cache ไฟล์เก่า
+
 ## V1.2.0
 
 - แก้ปุ่ม `CLEAR LOOP` ไม่ให้ข้อความล้นขอบเมื่อย่อ/ขยาย Dock UI

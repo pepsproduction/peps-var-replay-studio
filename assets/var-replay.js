@@ -2,6 +2,7 @@
   'use strict';
 
   const $ = (selector) => document.querySelector(selector);
+  const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const params = new URLSearchParams(location.search);
   const pageMode = params.get('mode') || 'control';
   if (pageMode === 'highlight-screen') return; // Exit early for highlight screen to prevent conflicts
@@ -47,6 +48,7 @@
     statusText: $('#statusText'),
     zoomRange: $('#zoomRange'),
     zoomVal: $('#zoomVal'),
+    zoomPresetButtons: $$('[data-zoom-preset]'),
     panFrame: $('#panFrame'),
     panViewport: $('#panViewport'),
     btnResetZoom: $('#btnResetZoom'),
@@ -102,6 +104,9 @@
   let dragData = null;
   let syncTimer = null;
   let pendingSeek = null;
+  let timelineWasPlaying = false;
+  let pendingScrubTime = null;
+  let scrubFrame = null;
 
 
 
@@ -293,7 +298,7 @@
     return clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
   }
 
-  function setCurrentTime(time, shouldBroadcast = true) {
+  function setCurrentTime(time, shouldBroadcast = true, reason = 'seek') {
     if (!video || !state.hasClip) return;
     const duration = state.duration || video.duration || 0;
     const next = clamp(Number(time) || 0, 0, duration || 0);
@@ -302,7 +307,38 @@
     suppress = false;
     state.currentTime = next;
     renderTimeline();
-    if (shouldBroadcast) broadcast('seek');
+    if (shouldBroadcast) broadcast(reason);
+  }
+
+  function scheduleScrubTime(time) {
+    pendingScrubTime = time;
+    state.currentTime = time;
+    renderTimeline();
+    if (scrubFrame) return;
+    scrubFrame = requestAnimationFrame(() => {
+      scrubFrame = null;
+      if (pendingScrubTime === null) return;
+      const next = pendingScrubTime;
+      pendingScrubTime = null;
+      setCurrentTime(next, true, 'scrub');
+    });
+  }
+
+  function beginScrubSession() {
+    timelineWasPlaying = state.isPlaying;
+    if (timelineWasPlaying) pause();
+  }
+
+  function finishScrubSession() {
+    const finalTime = pendingScrubTime ?? state.currentTime;
+    if (scrubFrame) {
+      cancelAnimationFrame(scrubFrame);
+      scrubFrame = null;
+    }
+    pendingScrubTime = null;
+    setCurrentTime(finalTime, true, 'seek');
+    if (timelineWasPlaying) play();
+    timelineWasPlaying = false;
   }
 
   async function play() {
@@ -423,7 +459,7 @@
       video.playbackRate = state.speed;
       video.muted = !state.screenAudio;
       const drift = Math.abs((video.currentTime || 0) - state.currentTime);
-      if (state.hasClip && Number.isFinite(state.currentTime) && (drift > 0.25 || next.reason === 'seek')) {
+      if (state.hasClip && Number.isFinite(state.currentTime) && (drift > 0.25 || next.reason === 'seek' || next.reason === 'scrub')) {
         try { video.currentTime = state.currentTime; } catch (err) { pendingSeek = state.currentTime; }
       }
       if (state.isPlaying && video.paused) {
@@ -509,6 +545,10 @@
   function renderZoom() {
     if (els.zoomRange) els.zoomRange.value = String(state.zoom);
     if (els.zoomVal) els.zoomVal.textContent = niceRate(state.zoom);
+    els.zoomPresetButtons.forEach((button) => {
+      const preset = Number(button.dataset.zoomPreset);
+      button.classList.toggle('active', Math.abs(state.zoom - preset) < 0.05);
+    });
   }
 
   function renderButtons() {
@@ -579,6 +619,9 @@
     els.btnForward1?.addEventListener('click', () => setCurrentTime(state.currentTime + 1));
     els.speedRange?.addEventListener('input', () => setSpeed(els.speedRange.value));
     els.zoomRange?.addEventListener('input', () => setZoom(els.zoomRange.value));
+    els.zoomPresetButtons.forEach((button) => {
+      button.addEventListener('click', () => setZoom(button.dataset.zoomPreset));
+    });
     els.btnResetZoom?.addEventListener('click', resetZoom);
 
     els.screenAudio?.addEventListener('change', () => {
@@ -646,6 +689,7 @@
       event.preventDefault();
       event.stopPropagation();
       dragKind = kind;
+      if (kind === 'scrub') beginScrubSession();
       if (kind === 'A') els.markA?.classList.add('dragging');
       if (kind === 'B') els.markB?.classList.add('dragging');
       window.addEventListener('pointermove', move);
@@ -657,17 +701,19 @@
       if (!dragKind || !els.timelineBox) return;
       const pct = pointerPct(event, els.timelineBox);
       const time = timeFromTimelinePct(pct);
-      if (dragKind === 'scrub') setCurrentTime(time, true);
+      if (dragKind === 'scrub') scheduleScrubTime(time);
       if (dragKind === 'A') setA(time);
       if (dragKind === 'B') setB(time);
     }
 
     function end() {
+      const finishedKind = dragKind;
       els.markA?.classList.remove('dragging');
       els.markB?.classList.remove('dragging');
       dragKind = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      if (finishedKind === 'scrub') finishScrubSession();
     }
 
     els.clickLayer?.addEventListener('pointerdown', (event) => begin('scrub', event));
@@ -732,6 +778,20 @@
     });
   }
 
+  function setupZoomGestures() {
+    if (!els.panFrame) return;
+    els.panFrame.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const direction = event.deltaY < 0 ? 1 : -1;
+      const step = event.shiftKey ? 0.5 : 0.25;
+      setZoom(state.zoom + direction * step);
+    }, { passive: false });
+    els.panFrame.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      resetZoom();
+    });
+  }
+
   function setupPanDrag() {
     if (!els.panFrame || !els.panViewport) return;
 
@@ -763,6 +823,7 @@
     }
 
     els.panFrame.addEventListener('pointerdown', begin);
+    setupZoomGestures();
   }
 
   function setupKeyboard() {
