@@ -1,5 +1,18 @@
 # Changelog
 
+## V1.7.0
+
+- Add active Control Dock leadership so only the most recently used control UI sends playback state and heartbeat.
+- Reduce playback heartbeat frequency and use it only as drift correction while video is playing.
+- Throttle scrub preview seeks/broadcasts and use fast seek during dragging, then precise seek on release.
+- Avoid full Screen DOM renders on heartbeat and scrub preview messages.
+- Remove duplicate play/pause broadcasts from native video events.
+- Reduce duplicate A/B marker broadcasts while dragging.
+- Keep the hidden Control preview video in the render tree so Chromium continues loading metadata and decoding frames.
+- Run unsupported-codec frame validation on Control only so background/throttled Screen outputs do not falsely reject valid H.264 clips.
+- Wake and reload Screen video when a throttled/hidden Browser Source becomes active again.
+- Add asset version query `v=1.7.0` to force fresh JS/CSS in OBS/Chromium cache.
+
 ## V1.6.0
 
 - เพิ่มการตรวจจับไฟล์ที่ browser โหลด metadata ได้แต่ decode ภาพไม่ได้ เช่น HEVC/H.265 ใน MKV

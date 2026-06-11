@@ -682,12 +682,17 @@ body.is-control #dropZone.drop-zone.ready {
 }
 body.is-control #dropZone .control-video,
 body.is-control #dropZone.ready .control-video {
-  display: none;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  visibility: hidden;
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 160px;
+  height: 90px;
+  opacity: 0.01;
+  visibility: visible;
   pointer-events: none;
+  object-fit: contain;
+  z-index: 0;
 }
 body.is-control #dropZone .drop-overlay,
 body.is-control #dropZone.ready .drop-overlay {
@@ -706,6 +711,7 @@ body.is-control #dropZone.ready .drop-overlay {
   background: rgba(9, 9, 9, 0.72);
   color: #ffe4d4;
   backdrop-filter: blur(10px);
+  z-index: 1;
 }
 body.is-control #dropZone.ready .drop-overlay {
   color: #ffffff;
