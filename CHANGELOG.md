@@ -1,5 +1,11 @@
 # Changelog
 
+## V1.8.0
+
+- Fix Highlight Source opened after clip selection showing ready but no video by loading the latest saved highlight clip from IndexedDB on startup.
+- Add cache-busting query for `highlight-replay.js?v=1.8.0`.
+- Bump Control Center label and sample config to V1.8.0.
+
 ## V1.7.0
 
 - Add active Control Dock leadership so only the most recently used control UI sends playback state and heartbeat.
