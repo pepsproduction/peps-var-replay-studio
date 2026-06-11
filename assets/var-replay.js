@@ -115,6 +115,15 @@
   let pendingScrubTime = null;
   let scrubFrame = null;
   let loadingClip = null;
+  let loadingClipVersion = 0;
+  let loadedClipVersion = 0;
+  let lastRemoteSeekAt = 0;
+
+  const DIRECT_DUPLICATE_MS = 2500;
+  const HEARTBEAT_SEEK_MS = 900;
+  const HEARTBEAT_DRIFT = 0.65;
+  const PLAY_DRIFT = 0.35;
+  const LIVE_SEEK_REASONS = new Set(['seek', 'scrub', 'file', 'metadata', 'play', 'pause', 'video-play', 'video-pause']);
 
 
 
@@ -247,6 +256,26 @@
     if (els.dropText) els.dropText.textContent = subtitle;
   }
 
+  function clipVersion(meta = {}) {
+    return Number(meta.updatedAt) || Date.now();
+  }
+
+  function videoHasSource(target = video) {
+    return Boolean(target && (target.currentSrc || target.src));
+  }
+
+  function hasLoadedClip(version) {
+    return Boolean(version && loadedClipVersion === version && state.hasClip && videoHasSource(video) && (video?.readyState || 0) >= 1);
+  }
+
+  function isLoadingClip(version) {
+    return Boolean(version && loadingClipVersion === version);
+  }
+
+  function shouldLoadClip(version) {
+    return Boolean(version && !hasLoadedClip(version) && !isLoadingClip(version));
+  }
+
   function waitForVideoReady(target) {
     return new Promise((resolve, reject) => {
       if (!target) {
@@ -299,8 +328,14 @@
 
   async function loadBlob(blob, meta = {}) {
     if (!blob || !video) return;
+    const nextVersion = clipVersion(meta);
+    if (hasLoadedClip(nextVersion)) {
+      setStatus(mode === 'screen' ? 'Clip already loaded on Screen' : state.clipName || meta.name || 'READY');
+      return;
+    }
     const token = Symbol('clip-load');
     loadingClip = token;
+    loadingClipVersion = nextVersion;
     const nextUrl = URL.createObjectURL(blob);
     const previousUrl = objectUrl;
     const nextTime = Number.isFinite(state.currentTime) ? state.currentTime : 0;
@@ -313,6 +348,7 @@
       await prepareVideoSource(targetVideo, nextUrl);
     } catch (err) {
       if (loadingClip === token) loadingClip = null;
+      if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
       pendingSeek = null;
       if (targetVideo.src === nextUrl) resetInactiveScreenBuffer(targetVideo);
       URL.revokeObjectURL(nextUrl);
@@ -320,6 +356,7 @@
     }
 
     if (loadingClip !== token) {
+      if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
       if (targetVideo.src === nextUrl) resetInactiveScreenBuffer(targetVideo);
       URL.revokeObjectURL(nextUrl);
       return;
@@ -328,7 +365,8 @@
     objectUrl = nextUrl;
     state.hasClip = true;
     state.clipName = meta.name || 'replay-video';
-    state.clipVersion = meta.updatedAt || Date.now();
+    state.clipVersion = nextVersion;
+    loadedClipVersion = nextVersion;
     state.duration = Number.isFinite(targetVideo.duration) ? targetVideo.duration : state.duration;
     state.currentTime = clamp(nextTime, 0, state.duration || nextTime);
 
@@ -366,13 +404,21 @@
     setStatus(mode === 'screen' ? 'Clip loaded on Screen' : state.clipName);
     if (mode === 'control') setDropState('ready', state.clipName, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
     loadingClip = null;
+    if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
     render();
   }
 
-  async function loadSaved() {
+  async function loadSaved(expectedVersion = 0) {
     try {
       const row = await getSavedClip();
-      if (row?.blob) await loadBlob(row.blob, row);
+      const rowVersion = Number(row?.updatedAt) || 0;
+      if (expectedVersion && rowVersion && rowVersion !== expectedVersion) {
+        return;
+      }
+      if (row?.blob) {
+        if (hasLoadedClip(rowVersion)) return;
+        await loadBlob(row.blob, row);
+      }
       else setStatus(mode === 'screen' ? 'Waiting for Control…' : 'READY');
     } catch (err) {
       console.warn(err);
@@ -595,16 +641,26 @@
     state.viewWidth = clamp(Number(state.viewWidth) || 1, 0.01, 1);
 
     if (mode === 'screen' && state.clipVersion && state.clipVersion !== prevVersion) {
-      const isDirectDuplicate = state.clipVersion === lastDirectBlobVersion && Date.now() - lastDirectBlobAt < 2500;
-      if (!isDirectDuplicate) await loadSaved();
+      const isDirectDuplicate = state.clipVersion === lastDirectBlobVersion && Date.now() - lastDirectBlobAt < DIRECT_DUPLICATE_MS;
+      if (!isDirectDuplicate && shouldLoadClip(state.clipVersion)) await loadSaved(state.clipVersion);
     }
 
     if (video) {
       video.playbackRate = state.speed;
       video.muted = !state.screenAudio;
       const drift = Math.abs((video.currentTime || 0) - state.currentTime);
-      if (state.hasClip && Number.isFinite(state.currentTime) && (drift > 0.25 || next.reason === 'seek' || next.reason === 'scrub')) {
-        try { video.currentTime = state.currentTime; } catch (err) { pendingSeek = state.currentTime; }
+      const now = Date.now();
+      const reason = next.reason || '';
+      const isLiveSeek = LIVE_SEEK_REASONS.has(reason);
+      const driftLimit = reason === 'heartbeat' ? HEARTBEAT_DRIFT : PLAY_DRIFT;
+      const heartbeatReady = reason !== 'heartbeat' || now - lastRemoteSeekAt > HEARTBEAT_SEEK_MS;
+      if (state.hasClip && Number.isFinite(state.currentTime) && (isLiveSeek || (drift > driftLimit && heartbeatReady))) {
+        try {
+          video.currentTime = state.currentTime;
+          lastRemoteSeekAt = now;
+        } catch (err) {
+          pendingSeek = state.currentTime;
+        }
       }
       if (state.isPlaying && video.paused) {
         video.play().catch(() => setStatus('Click Screen once to allow playback'));
@@ -841,8 +897,11 @@
       event.stopPropagation();
       dragKind = kind;
       if (kind === 'scrub') beginScrubSession();
-      if (kind === 'A') els.markA?.classList.add('dragging');
-      if (kind === 'B') els.markB?.classList.add('dragging');
+      if (kind === 'A' || kind === 'B') {
+        beginScrubSession();
+        if (kind === 'A') els.markA?.classList.add('dragging');
+        if (kind === 'B') els.markB?.classList.add('dragging');
+      }
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
       move(event);
@@ -853,8 +912,14 @@
       const pct = pointerPct(event, els.timelineBox);
       const time = timeFromTimelinePct(pct);
       if (dragKind === 'scrub') scheduleScrubTime(time);
-      if (dragKind === 'A') setA(time);
-      if (dragKind === 'B') setB(time);
+      if (dragKind === 'A') {
+        setA(time);
+        scheduleScrubTime(time);
+      }
+      if (dragKind === 'B') {
+        setB(time);
+        scheduleScrubTime(time);
+      }
     }
 
     function end() {
@@ -864,7 +929,7 @@
       dragKind = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
-      if (finishedKind === 'scrub') finishScrubSession();
+      if (finishedKind === 'scrub' || finishedKind === 'A' || finishedKind === 'B') finishScrubSession();
     }
 
     els.clickLayer?.addEventListener('pointerdown', (event) => begin('scrub', event));
@@ -1055,15 +1120,22 @@
       if (mode === 'screen' && msg.type === 'clip:blob' && msg.payload?.blob) {
         lastDirectBlobVersion = msg.payload.meta?.updatedAt || 0;
         lastDirectBlobAt = Date.now();
-        await loadBlob(msg.payload.blob, msg.payload.meta || {});
+        try {
+          await loadBlob(msg.payload.blob, msg.payload.meta || {});
+        } catch (err) {
+          console.warn(err);
+          lastDirectBlobVersion = 0;
+          lastDirectBlobAt = 0;
+          await loadSaved(msg.payload.meta?.updatedAt || 0);
+        }
       }
       if (mode === 'screen' && msg.type === 'state') await applyIncoming(msg.payload);
       if (mode === 'screen' && msg.type === 'clip:update') {
         const version = msg.payload?.version || 0;
         const isSameClip = version && version === lastDirectBlobVersion;
-        const isImmediateDuplicate = Date.now() - lastDirectBlobAt < 2500;
-        if (!(isSameClip && isImmediateDuplicate)) {
-          await loadSaved();
+        const isImmediateDuplicate = Date.now() - lastDirectBlobAt < DIRECT_DUPLICATE_MS;
+        if (shouldLoadClip(version) && !(isSameClip && isImmediateDuplicate)) {
+          await loadSaved(version);
         }
       }
       if (mode === 'control' && msg.type === 'screen:ready') broadcast('screen-ready');
