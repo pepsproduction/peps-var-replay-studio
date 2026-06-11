@@ -54,6 +54,14 @@ https://YOURNAME.github.io/peps-var-replay-studio/index.html?mode=screen
 
 ### หมายเหตุสำคัญเรื่องไฟล์วิดีโอ
 
+OBS Browser Source / Chromium เล่นไฟล์บาง codec ไม่ได้ แม้ไฟล์จะเปิดใน VLC ได้ เช่น `HEVC/H.265` ใน `.mkv` อาจทำให้เวลาเดินแต่ภาพไม่ decode และดูเหมือนค้าง ให้ใช้ไฟล์ `H.264 MP4` สำหรับ VAR Replay
+
+แปลงคลิป OBS Replay เป็น H.264 MP4 ได้ด้วย:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\convert-replay-to-h264.ps1 -InputPath "Replay 2026-05-23 09-43-35.mkv"
+```
+
 ไฟล์ที่ลากเข้า browser เป็นไฟล์ local ของเครื่อง ผู้ใช้ทั่วไปไม่สามารถส่งไฟล์ local จาก Chrome ไปยัง OBS Browser Source คนละ browser profile ได้โดยตรง เพราะติด sandbox/security ของ browser
 
 ดังนั้นหากเปิด Control ใน Chrome แต่เปิด Screen ใน OBS แล้ว Screen ไม่เห็นคลิป ให้ใช้วิธีนี้แทน:
@@ -85,6 +93,8 @@ peps-var-replay-studio/
 │  └─ var-replay.js
 ├─ data/
 │  └─ sample-config.json
+├─ tools/
+│  └─ convert-replay-to-h264.ps1
 ├─ ANALYSIS_AND_WORKFLOW.md
 ├─ CHANGELOG.md
 └─ README.md
