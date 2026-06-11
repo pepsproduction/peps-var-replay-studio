@@ -584,6 +584,9 @@
     if (!isHighlightScreen || !bc) return;
     initScreenTransitionOverlay();
     setScreenStatus('Highlight Source Ready');
+    loadScreenClipFromDB().catch((err) => {
+      console.warn('initial highlight clip load failed', err);
+    });
 
     if (els.screenVideo) {
       els.screenVideo.addEventListener('loadstart', () => {
