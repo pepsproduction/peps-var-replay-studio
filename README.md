@@ -52,6 +52,8 @@ https://YOURNAME.github.io/peps-var-replay-studio/index.html?mode=screen
 
 การเปิดทั้ง Control และ Screen ใน OBS ช่วยให้ browser context มีโอกาสแชร์ IndexedDB/BroadcastChannel ได้ดีที่สุด
 
+Performance note: if multiple Control Dock UIs are open, the dock used most recently becomes the active controller. Other control docks stay passive and do not send playback heartbeat, which helps keep Screen playback smooth.
+
 ### หมายเหตุสำคัญเรื่องไฟล์วิดีโอ
 
 OBS Browser Source / Chromium เล่นไฟล์บาง codec ไม่ได้ แม้ไฟล์จะเปิดใน VLC ได้ เช่น `HEVC/H.265` ใน `.mkv` อาจทำให้เวลาเดินแต่ภาพไม่ decode และดูเหมือนค้าง ให้ใช้ไฟล์ `H.264 MP4` สำหรับ VAR Replay

@@ -118,12 +118,30 @@
   let loadingClipVersion = 0;
   let loadedClipVersion = 0;
   let lastRemoteSeekAt = 0;
+  let lastRemoteScrubSeekAt = 0;
+  let lastScrubSeekAt = 0;
+  let lastScrubBroadcastAt = 0;
+  let controlLeaseTimer = null;
+  let isControlLeader = false;
 
+  const CLIENT_ID = `${mode}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+  const ACTIVE_CONTROL_KEY = `${CHANNEL}:active-control`;
   const DIRECT_DUPLICATE_MS = 2500;
-  const HEARTBEAT_SEEK_MS = 900;
-  const HEARTBEAT_DRIFT = 0.65;
-  const PLAY_DRIFT = 0.35;
-  const LIVE_SEEK_REASONS = new Set(['seek', 'scrub', 'file', 'metadata', 'play', 'pause', 'video-play', 'video-pause']);
+  const CONTROL_LEASE_MS = 3500;
+  const CONTROL_LEASE_REFRESH_MS = 1000;
+  const HEARTBEAT_INTERVAL_MS = 900;
+  const HEARTBEAT_SEEK_MS = 1400;
+  const HEARTBEAT_DRIFT = 0.9;
+  const PLAY_DRIFT = 0.45;
+  const SCRUB_SEEK_MS = 45;
+  const SCRUB_BROADCAST_MS = 60;
+  const REMOTE_SCRUB_SEEK_MS = 45;
+  const LIVE_SEEK_REASONS = new Set(['seek', 'scrub-preview', 'scrub-final', 'file', 'metadata', 'play', 'pause']);
+  const CLAIM_BROADCAST_REASONS = new Set([
+    'file', 'play', 'pause', 'seek', 'scrub-preview', 'scrub-final',
+    'speed', 'zoom', 'pan', 'resetZoom', 'setA', 'setB', 'clearLoop',
+    'navigator', 'navigatorReset', 'screenAudio', 'showStatus', 'autoSync'
+  ]);
   const UNSUPPORTED_VIDEO_TITLE = 'Unsupported video codec';
   const UNSUPPORTED_VIDEO_HINT = 'ไฟล์นี้ browser decode ภาพไม่ได้ ให้แปลงเป็น H.264 MP4 ก่อนใช้ใน VAR Replay';
 
@@ -171,6 +189,76 @@
       console.warn('Broadcast failed', type, err);
       return false;
     }
+  }
+
+  function readControlLease() {
+    try {
+      return JSON.parse(localStorage.getItem(ACTIVE_CONTROL_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  }
+
+  function writeControlLease() {
+    if (mode !== 'control') return false;
+    const lease = { id: CLIENT_ID, at: Date.now() };
+    try {
+      localStorage.setItem(ACTIVE_CONTROL_KEY, JSON.stringify(lease));
+      isControlLeader = true;
+      return true;
+    } catch {
+      isControlLeader = true;
+      return true;
+    }
+  }
+
+  function leaseIsFresh(lease, now = Date.now()) {
+    return Boolean(lease?.id && Number.isFinite(Number(lease.at)) && now - Number(lease.at) < CONTROL_LEASE_MS);
+  }
+
+  function hasControlLease() {
+    if (mode !== 'control') return false;
+    const lease = readControlLease();
+    isControlLeader = Boolean(lease?.id === CLIENT_ID && leaseIsFresh(lease));
+    return isControlLeader;
+  }
+
+  function claimControl() {
+    if (mode !== 'control') return false;
+    return writeControlLease();
+  }
+
+  function canBroadcast(reason = '') {
+    if (mode !== 'control') return false;
+    if (CLAIM_BROADCAST_REASONS.has(reason) && !hasControlLease()) claimControl();
+    return hasControlLease();
+  }
+
+  function setupControlLeadership() {
+    if (mode !== 'control') return;
+    const lease = readControlLease();
+    if (!leaseIsFresh(lease)) claimControl();
+
+    window.addEventListener('storage', (event) => {
+      if (event.key !== ACTIVE_CONTROL_KEY) return;
+      const lease = readControlLease();
+      isControlLeader = Boolean(lease?.id === CLIENT_ID && leaseIsFresh(lease));
+    });
+
+    document.addEventListener('pointerdown', () => claimControl(), { capture: true });
+    document.addEventListener('keydown', () => claimControl(), { capture: true });
+
+    clearInterval(controlLeaseTimer);
+    controlLeaseTimer = setInterval(() => {
+      if (hasControlLease()) writeControlLease();
+    }, CONTROL_LEASE_REFRESH_MS);
+
+    window.addEventListener('beforeunload', () => {
+      const lease = readControlLease();
+      if (lease?.id === CLIENT_ID) {
+        try { localStorage.removeItem(ACTIVE_CONTROL_KEY); } catch {}
+      }
+    });
   }
 
   function screenUrl() {
@@ -264,6 +352,19 @@
 
   function videoHasSource(target = video) {
     return Boolean(target && (target.currentSrc || target.src));
+  }
+
+  function wakeScreenVideo() {
+    if (mode !== 'screen' || !video || !state.hasClip || !videoHasSource(video)) return;
+    if ((video.readyState || 0) < 1 && (video.networkState || 0) === 0) {
+      try { video.load(); } catch {}
+    }
+    if (Number.isFinite(state.currentTime) && state.currentTime > 0) {
+      seekVideoTo(video, state.currentTime, { fast: true, minDelta: 0.08 });
+    }
+    video.playbackRate = state.speed;
+    video.muted = !state.screenAudio;
+    if (state.isPlaying) video.play().catch(() => setStatus('Click Screen once to allow playback'));
   }
 
   function hasLoadedClip(version) {
@@ -386,7 +487,7 @@
 
     try {
       await prepareVideoSource(targetVideo, nextUrl);
-      await assertVideoFrameDecodable(targetVideo, meta);
+      if (mode === 'control') await assertVideoFrameDecodable(targetVideo, meta);
     } catch (err) {
       if (loadingClip === token) loadingClip = null;
       if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
@@ -447,6 +548,7 @@
     if (mode === 'control') setDropState('ready', state.clipName, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
     loadingClip = null;
     if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
+    wakeScreenVideo();
     render();
   }
 
@@ -470,6 +572,7 @@
   }
 
   async function handleFile(file) {
+    claimControl();
     if (!file || !file.type.startsWith('video/')) {
       alert('กรุณาเลือกไฟล์วิดีโอเท่านั้น');
       return;
@@ -542,16 +645,55 @@
     return clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
   }
 
-  function setCurrentTime(time, shouldBroadcast = true, reason = 'seek') {
+  function seekVideoTo(target, time, options = {}) {
+    if (!target || !Number.isFinite(time)) return false;
+    const duration = state.duration || target.duration || time || 0;
+    const next = clamp(Number(time) || 0, 0, duration || 0);
+    const minDelta = Number.isFinite(options.minDelta) ? options.minDelta : 0.006;
+    if (Math.abs((target.currentTime || 0) - next) < minDelta) return false;
+    try {
+      if (options.fast && typeof target.fastSeek === 'function') target.fastSeek(next);
+      else target.currentTime = next;
+      return true;
+    } catch {
+      pendingSeek = next;
+      return false;
+    }
+  }
+
+  function setCurrentTime(time, shouldBroadcast = true, reason = 'seek', options = {}) {
     if (!video || !state.hasClip) return;
     const duration = state.duration || video.duration || 0;
     const next = clamp(Number(time) || 0, 0, duration || 0);
     suppress = true;
-    video.currentTime = next;
+    seekVideoTo(video, next, {
+      fast: Boolean(options.fast),
+      minDelta: Number.isFinite(options.minDelta) ? options.minDelta : 0.006
+    });
     suppress = false;
     state.currentTime = next;
     renderTimeline();
     if (shouldBroadcast) broadcast(reason);
+  }
+
+  function flushScrubPreview(force = false) {
+    scrubFrame = null;
+    if (pendingScrubTime === null) return;
+    const next = pendingScrubTime;
+    pendingScrubTime = null;
+    const now = performance.now();
+    const shouldSeek = force || now - lastScrubSeekAt >= SCRUB_SEEK_MS;
+    const shouldBroadcast = force || now - lastScrubBroadcastAt >= SCRUB_BROADCAST_MS;
+    if (shouldSeek) {
+      seekVideoTo(video, next, { fast: true, minDelta: 0.004 });
+      lastScrubSeekAt = now;
+    }
+    state.currentTime = next;
+    renderTimeline();
+    if (shouldBroadcast) {
+      lastScrubBroadcastAt = now;
+      broadcast('scrub-preview');
+    }
   }
 
   function scheduleScrubTime(time) {
@@ -559,17 +701,13 @@
     state.currentTime = time;
     renderTimeline();
     if (scrubFrame) return;
-    scrubFrame = requestAnimationFrame(() => {
-      scrubFrame = null;
-      if (pendingScrubTime === null) return;
-      const next = pendingScrubTime;
-      pendingScrubTime = null;
-      setCurrentTime(next, true, 'scrub');
-    });
+    scrubFrame = requestAnimationFrame(() => flushScrubPreview(false));
   }
 
   function beginScrubSession() {
     timelineWasPlaying = state.isPlaying;
+    lastScrubSeekAt = 0;
+    lastScrubBroadcastAt = 0;
     if (timelineWasPlaying) pause();
   }
 
@@ -580,7 +718,7 @@
       scrubFrame = null;
     }
     pendingScrubTime = null;
-    setCurrentTime(finalTime, true, 'seek');
+    setCurrentTime(finalTime, true, 'scrub-final', { minDelta: 0 });
     if (timelineWasPlaying) play();
     timelineWasPlaying = false;
   }
@@ -657,19 +795,19 @@
     });
   }
 
-  function setA(time = state.currentTime) {
+  function setA(time = state.currentTime, shouldBroadcast = true) {
     const t = clamp(Number(time) || 0, 0, state.duration || 0);
     state.loopA = t;
     if (state.loopB !== null && state.loopB <= state.loopA) state.loopB = Math.min(state.duration || t, t + 0.1);
-    broadcast('setA');
+    if (shouldBroadcast) broadcast('setA');
     renderLoop();
   }
 
-  function setB(time = state.currentTime) {
+  function setB(time = state.currentTime, shouldBroadcast = true) {
     const t = clamp(Number(time) || 0, 0, state.duration || 0);
     state.loopB = t;
     if (state.loopA !== null && state.loopA >= state.loopB) state.loopA = Math.max(0, t - 0.1);
-    broadcast('setB');
+    if (shouldBroadcast) broadcast('setB');
     renderLoop();
   }
 
@@ -685,7 +823,7 @@
   }
 
   function broadcast(reason) {
-    if (mode !== 'control') return;
+    if (!canBroadcast(reason)) return;
     post('state', { ...state, reason });
   }
 
@@ -705,18 +843,28 @@
     if (video) {
       video.playbackRate = state.speed;
       video.muted = !state.screenAudio;
+      wakeScreenVideo();
       const drift = Math.abs((video.currentTime || 0) - state.currentTime);
       const now = Date.now();
       const reason = next.reason || '';
+      const isScrubPreview = reason === 'scrub-preview';
       const isLiveSeek = LIVE_SEEK_REASONS.has(reason);
       const driftLimit = reason === 'heartbeat' ? HEARTBEAT_DRIFT : PLAY_DRIFT;
       const heartbeatReady = reason !== 'heartbeat' || now - lastRemoteSeekAt > HEARTBEAT_SEEK_MS;
-      if (state.hasClip && Number.isFinite(state.currentTime) && (isLiveSeek || (drift > driftLimit && heartbeatReady))) {
-        try {
-          video.currentTime = state.currentTime;
+      const scrubReady = !isScrubPreview || now - lastRemoteScrubSeekAt > REMOTE_SCRUB_SEEK_MS;
+      const shouldSeek = state.hasClip && Number.isFinite(state.currentTime) && (
+        (isScrubPreview && scrubReady && drift > 0.012) ||
+        (!isScrubPreview && isLiveSeek && drift > 0.006) ||
+        (!isScrubPreview && !isLiveSeek && drift > driftLimit && heartbeatReady)
+      );
+      if (shouldSeek) {
+        const ok = seekVideoTo(video, state.currentTime, {
+          fast: isScrubPreview,
+          minDelta: isScrubPreview ? 0.012 : 0
+        });
+        if (ok) {
           lastRemoteSeekAt = now;
-        } catch (err) {
-          pendingSeek = state.currentTime;
+          if (isScrubPreview) lastRemoteScrubSeekAt = now;
         }
       }
       if (state.isPlaying && video.paused) {
@@ -724,6 +872,7 @@
       }
       if (!state.isPlaying && !video.paused) video.pause();
     }
+    if (next.reason === 'heartbeat' || next.reason === 'scrub-preview') return;
     render();
   }
 
@@ -970,11 +1119,11 @@
       const time = timeFromTimelinePct(pct);
       if (dragKind === 'scrub') scheduleScrubTime(time);
       if (dragKind === 'A') {
-        setA(time);
+        setA(time, false);
         scheduleScrubTime(time);
       }
       if (dragKind === 'B') {
-        setB(time);
+        setB(time, false);
         scheduleScrubTime(time);
       }
     }
@@ -1150,13 +1299,11 @@
       if (target !== video) return;
       state.isPlaying = true;
       renderButtons();
-      broadcast('video-play');
     });
     target.addEventListener('pause', () => {
       if (target !== video) return;
       state.isPlaying = false;
       renderButtons();
-      broadcast('video-pause');
     });
     target.addEventListener('error', () => {
       if (target !== video) return;
@@ -1203,17 +1350,19 @@
     if (mode !== 'control') return;
     clearInterval(syncTimer);
     syncTimer = setInterval(() => {
-      if (!state.autoSync || !state.hasClip || !video) return;
+      if (!state.autoSync || !state.hasClip || !video || !hasControlLease()) return;
+      if (video.paused && !state.isPlaying) return;
       state.currentTime = video.currentTime || 0;
       state.duration = video.duration || state.duration;
       state.isPlaying = !video.paused;
       broadcast('heartbeat');
-    }, 300);
+    }, HEARTBEAT_INTERVAL_MS);
   }
 
   async function init() {
     const videoTargets = mode === 'screen' && screenBuffers.length ? screenBuffers : [video].filter(Boolean);
     videoTargets.forEach((target) => setupVideoEvents(target));
+    setupControlLeadership();
     setupBroadcast();
     setupControl();
     render();
@@ -1221,6 +1370,11 @@
     setupSyncTimer();
     if (mode === 'screen') {
       post('screen:ready', { ready: true });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) wakeScreenVideo();
+      });
+      window.addEventListener('pageshow', wakeScreenVideo);
+      window.addEventListener('focus', wakeScreenVideo);
       document.addEventListener('click', () => {
         if (state.isPlaying && video?.paused) video.play().catch(() => {});
       }, { once: true });
