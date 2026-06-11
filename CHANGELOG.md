@@ -1,5 +1,13 @@
 # Changelog
 
+## V1.6.0
+
+- เพิ่มการตรวจจับไฟล์ที่ browser โหลด metadata ได้แต่ decode ภาพไม่ได้ เช่น HEVC/H.265 ใน MKV
+- หยุดไม่ให้บันทึกหรือส่งคลิป unsupported ไป Screen เพื่อลดอาการเหมือนเล่นแล้วภาพค้าง
+- แสดงสถานะชัดเจนให้แปลงไฟล์เป็น H.264 MP4 ก่อนใช้ใน VAR Replay
+- เพิ่ม `tools/convert-replay-to-h264.ps1` สำหรับแปลงคลิป OBS Replay เป็น H.264 MP4
+- เพิ่ม asset version query `v=1.6.0` เพื่อบังคับโหลด JS/CSS ใหม่
+
 ## V1.5.0
 
 - แก้ Screen reload คลิปซ้ำจาก `state` / `clip:update` โดยแยกสถานะคลิปที่กำลังโหลดและคลิปที่โหลดสำเร็จแล้ว

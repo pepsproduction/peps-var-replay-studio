@@ -124,6 +124,8 @@
   const HEARTBEAT_DRIFT = 0.65;
   const PLAY_DRIFT = 0.35;
   const LIVE_SEEK_REASONS = new Set(['seek', 'scrub', 'file', 'metadata', 'play', 'pause', 'video-play', 'video-pause']);
+  const UNSUPPORTED_VIDEO_TITLE = 'Unsupported video codec';
+  const UNSUPPORTED_VIDEO_HINT = 'ไฟล์นี้ browser decode ภาพไม่ได้ ให้แปลงเป็น H.264 MP4 ก่อนใช้ใน VAR Replay';
 
 
 
@@ -276,6 +278,24 @@
     return Boolean(version && !hasLoadedClip(version) && !isLoadingClip(version));
   }
 
+  function unsupportedVideoError(meta = {}) {
+    const err = new Error(`${UNSUPPORTED_VIDEO_TITLE}: ${meta.name || 'selected video'}`);
+    err.code = 'UNSUPPORTED_VIDEO_CODEC';
+    return err;
+  }
+
+  function isUnsupportedVideoError(err) {
+    return err?.code === 'UNSUPPORTED_VIDEO_CODEC';
+  }
+
+  function showUnsupportedVideo(meta = {}) {
+    const name = meta.name || state.clipName || 'video';
+    setStatus(`${UNSUPPORTED_VIDEO_TITLE}: convert ${name} to H.264 MP4`);
+    if (mode === 'control') {
+      setDropState('ready', UNSUPPORTED_VIDEO_TITLE, UNSUPPORTED_VIDEO_HINT);
+    }
+  }
+
   function waitForVideoReady(target) {
     return new Promise((resolve, reject) => {
       if (!target) {
@@ -319,6 +339,26 @@
     await waitForVideoReady(target);
   }
 
+  async function assertVideoFrameDecodable(target, meta = {}) {
+    if (!target) throw unsupportedVideoError(meta);
+    if (target.videoWidth > 0 && target.videoHeight > 0) return;
+    await new Promise((resolve) => {
+      const done = () => {
+        target.removeEventListener('loadeddata', done);
+        target.removeEventListener('canplay', done);
+        target.removeEventListener('resize', done);
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 450);
+      target.addEventListener('loadeddata', done, { once: true });
+      target.addEventListener('canplay', done, { once: true });
+      target.addEventListener('resize', done, { once: true });
+    });
+    if (target.videoWidth > 0 && target.videoHeight > 0) return;
+    throw unsupportedVideoError(meta);
+  }
+
   function resetInactiveScreenBuffer(target) {
     if (!target) return;
     target.pause();
@@ -346,12 +386,14 @@
 
     try {
       await prepareVideoSource(targetVideo, nextUrl);
+      await assertVideoFrameDecodable(targetVideo, meta);
     } catch (err) {
       if (loadingClip === token) loadingClip = null;
       if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
       pendingSeek = null;
       if (targetVideo.src === nextUrl) resetInactiveScreenBuffer(targetVideo);
       URL.revokeObjectURL(nextUrl);
+      if (isUnsupportedVideoError(err)) showUnsupportedVideo(meta);
       throw err;
     }
 
@@ -422,7 +464,8 @@
       else setStatus(mode === 'screen' ? 'Waiting for Control…' : 'READY');
     } catch (err) {
       console.warn(err);
-      setStatus('IndexedDB blocked');
+      if (isUnsupportedVideoError(err)) showUnsupportedVideo();
+      else setStatus('IndexedDB blocked');
     }
   }
 
@@ -445,12 +488,26 @@
     state.panXPct = 0;
     state.panYPct = 0;
     const updatedAt = Date.now();
-    await saveClip(file, updatedAt);
-    await loadBlob(file, { name: file.name, type: file.type, updatedAt });
-    post('clip:blob', { blob: file, meta: { name: file.name, type: file.type, updatedAt: state.clipVersion } });
-    post('clip:update', { version: state.clipVersion, name: state.clipName });
-    broadcast('file');
-    render();
+    try {
+      await loadBlob(file, { name: file.name, type: file.type, updatedAt });
+      await saveClip(file, updatedAt);
+      post('clip:blob', { blob: file, meta: { name: file.name, type: file.type, updatedAt: state.clipVersion } });
+      post('clip:update', { version: state.clipVersion, name: state.clipName });
+      broadcast('file');
+      render();
+    } catch (err) {
+      console.warn(err);
+      state.hasClip = false;
+      state.isPlaying = false;
+      state.duration = 0;
+      state.currentTime = 0;
+      if (isUnsupportedVideoError(err)) showUnsupportedVideo({ name: file.name });
+      else {
+        setStatus('VIDEO LOAD FAILED');
+        setDropState('ready', 'Video load failed', 'ลองเลือกไฟล์ใหม่อีกครั้ง');
+      }
+      render();
+    }
   }
 
   function setStatus(text) {
