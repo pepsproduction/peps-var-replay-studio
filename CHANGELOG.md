@@ -1,5 +1,13 @@
 # Changelog
 
+## V1.5.0
+
+- แก้ Screen reload คลิปซ้ำจาก `state` / `clip:update` โดยแยกสถานะคลิปที่กำลังโหลดและคลิปที่โหลดสำเร็จแล้ว
+- ปรับ heartbeat sync ไม่ให้ seek ถี่เกินไประหว่างเล่น ลดอาการค้าง/กระพริบจาก Browser Source
+- เพิ่ม fallback เมื่อ direct `clip:blob` โหลดไม่สำเร็จ ให้ Screen โหลดจาก IndexedDB ต่อโดยไม่ทำให้ flow ค้าง
+- ปรับการลาก marker A/B ให้ preview เฟรมวิดีโอตามตำแหน่งที่ลากเหมือน timeline scrub
+- เพิ่ม asset version query `v=1.5.0` เพื่อบังคับโหลด JS/CSS ใหม่
+
 ## V1.4.0
 
 - แก้อาการกระพริบตอนเปิด/เปลี่ยนคลิปใน VAR Screen ด้วยวิดีโอบัฟเฟอร์สำรองที่โหลดคลิปให้พร้อมก่อนสลับภาพ
