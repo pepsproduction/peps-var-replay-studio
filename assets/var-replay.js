@@ -16,7 +16,6 @@
 
   document.body.classList.toggle('is-screen', mode === 'screen');
   document.body.classList.toggle('is-control', mode !== 'screen');
-  if (mode === 'control') ensureControlVideo();
 
   const els = {
     fileInput: $('#fileInput'),
@@ -61,15 +60,12 @@
     autoSync: $('#autoSync'),
     videoWrapper: $('#videoWrapper'),
     controlVideo: $('#controlVideo'),
-    screenVideo: $('#screenVideo') || $('#mainVideo'),
+    screenVideo: $('#mainVideo'),
     screenVideoAlt: $('#mainVideoAlt'),
     screenStatus: $('#screenStatus'),
     modalLinks: $('#modalLinks'),
-    modalSponsor: $('#modalSponsor'),
     btnOpenLinks: $('#btnOpenLinks'),
     btnCloseLinks: $('#btnCloseLinks'),
-    btnOpenSponsor: $('#btnOpenSponsor'),
-    btnCloseSponsor: $('#btnCloseSponsor'),
     linkInputScreen: $('#linkInputScreen'),
     linkInputControl: $('#linkInputControl'),
     sourceInputScreen: $('#sourceInputScreen'),
@@ -123,6 +119,15 @@
   let lastScrubBroadcastAt = 0;
   let controlLeaseTimer = null;
   let isControlLeader = false;
+  let memoryControlLease = null;
+  let playbackFrameId = null;
+  let playbackFrameKind = '';
+  let lastPlaybackUiPaint = 0;
+  let lastScreenWakeAt = 0;
+  let isFileLoading = false;
+  let lastScreenProgressSentAt = 0;
+  let lastScreenProgressAt = 0;
+  let lastScreenRecoveryAt = 0;
 
   const CLIENT_ID = `${mode}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
   const ACTIVE_CONTROL_KEY = `${CHANNEL}:active-control`;
@@ -136,6 +141,11 @@
   const SCRUB_SEEK_MS = 45;
   const SCRUB_BROADCAST_MS = 60;
   const REMOTE_SCRUB_SEEK_MS = 45;
+  const PLAYBACK_UI_INTERVAL_MS = 40;
+  const SCREEN_WAKE_COOLDOWN_MS = 2500;
+  const SCREEN_PROGRESS_INTERVAL_MS = 700;
+  const SCREEN_PROGRESS_STALE_MS = 2400;
+  const SCREEN_RECOVERY_COOLDOWN_MS = 1400;
   const LIVE_SEEK_REASONS = new Set(['seek', 'scrub-preview', 'scrub-final', 'file', 'metadata', 'play', 'pause']);
   const CLAIM_BROADCAST_REASONS = new Set([
     'file', 'play', 'pause', 'seek', 'scrub-preview', 'scrub-final',
@@ -146,19 +156,6 @@
   const UNSUPPORTED_VIDEO_HINT = 'ไฟล์นี้ browser decode ภาพไม่ได้ ให้แปลงเป็น H.264 MP4 ก่อนใช้ใน VAR Replay';
 
 
-
-  function ensureControlVideo() {
-    const dz = $('#dropZone');
-    if (!dz || $('#controlVideo')) return;
-    dz.innerHTML = `
-      <video id="controlVideo" class="control-video" muted playsinline preload="metadata"></video>
-      <div id="dropOverlay" class="drop-overlay">
-        <div class="drop-icon" aria-hidden="true">▣</div>
-        <b id="dropTitle">คลิก</b> หรือ ลากไฟล์วิดีโอมาวางที่นี่<br>
-        <span id="dropText">รองรับทุกขนาดความยาวคลิป</span>
-      </div>
-    `;
-  }
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -193,15 +190,19 @@
 
   function readControlLease() {
     try {
-      return JSON.parse(localStorage.getItem(ACTIVE_CONTROL_KEY) || 'null');
+      const saved = localStorage.getItem(ACTIVE_CONTROL_KEY);
+      if (!saved) return memoryControlLease;
+      memoryControlLease = JSON.parse(saved);
+      return memoryControlLease;
     } catch {
-      return null;
+      return memoryControlLease;
     }
   }
 
   function writeControlLease() {
     if (mode !== 'control') return false;
     const lease = { id: CLIENT_ID, at: Date.now() };
+    memoryControlLease = lease;
     try {
       localStorage.setItem(ACTIVE_CONTROL_KEY, JSON.stringify(lease));
       isControlLeader = true;
@@ -257,6 +258,7 @@
       const lease = readControlLease();
       if (lease?.id === CLIENT_ID) {
         try { localStorage.removeItem(ACTIVE_CONTROL_KEY); } catch {}
+        memoryControlLease = null;
       }
     });
   }
@@ -354,13 +356,17 @@
     return Boolean(target && (target.currentSrc || target.src));
   }
 
-  function wakeScreenVideo() {
+  function wakeScreenVideo({ force = false, allowReload = false } = {}) {
     if (mode !== 'screen' || !video || !state.hasClip || !videoHasSource(video)) return;
-    if ((video.readyState || 0) < 1 && (video.networkState || 0) === 0) {
+    const now = Date.now();
+    if (!force && now - lastScreenWakeAt < SCREEN_WAKE_COOLDOWN_MS) return;
+    if (!force && document.hidden) return;
+    lastScreenWakeAt = now;
+    if (allowReload && (video.readyState || 0) < 1 && (video.networkState || 0) === 0) {
       try { video.load(); } catch {}
     }
     if (Number.isFinite(state.currentTime) && state.currentTime > 0) {
-      seekVideoTo(video, state.currentTime, { fast: true, minDelta: 0.08 });
+      seekVideoTo(video, state.currentTime, { minDelta: 0.08 });
     }
     video.playbackRate = state.speed;
     video.muted = !state.screenAudio;
@@ -451,13 +457,39 @@
         clearTimeout(timer);
         resolve();
       };
-      const timer = setTimeout(done, 450);
+      const timer = setTimeout(done, 2200);
       target.addEventListener('loadeddata', done, { once: true });
       target.addEventListener('canplay', done, { once: true });
       target.addEventListener('resize', done, { once: true });
     });
     if (target.videoWidth > 0 && target.videoHeight > 0) return;
     throw unsupportedVideoError(meta);
+  }
+
+  async function validateReplacementBlob(blob, meta = {}) {
+    if (!blob || mode !== 'control' || !state.hasClip) return;
+    const probe = document.createElement('video');
+    const probeUrl = URL.createObjectURL(blob);
+    probe.muted = true;
+    probe.playsInline = true;
+    probe.preload = 'auto';
+    probe.className = 'validation-video-engine';
+    document.body.appendChild(probe);
+    try {
+      await prepareVideoSource(probe, probeUrl);
+      await assertVideoFrameDecodable(probe, meta);
+    } catch (err) {
+      if (isUnsupportedVideoError(err)) throw err;
+      const codecError = unsupportedVideoError(meta);
+      codecError.cause = err;
+      throw codecError;
+    } finally {
+      probe.pause();
+      probe.removeAttribute('src');
+      try { probe.load(); } catch {}
+      probe.remove();
+      URL.revokeObjectURL(probeUrl);
+    }
   }
 
   function resetInactiveScreenBuffer(target) {
@@ -548,7 +580,7 @@
     if (mode === 'control') setDropState('ready', state.clipName, 'คลิกหรือลากไฟล์ใหม่เพื่อเปลี่ยนคลิป');
     loadingClip = null;
     if (loadingClipVersion === nextVersion) loadingClipVersion = 0;
-    wakeScreenVideo();
+    wakeScreenVideo({ force: true });
     render();
   }
 
@@ -577,21 +609,26 @@
       alert('กรุณาเลือกไฟล์วิดีโอเท่านั้น');
       return;
     }
+    const previousState = { ...state };
+    const hadClip = state.hasClip && videoHasSource(video);
+    isFileLoading = true;
+    renderButtons();
     setDropState('loading', 'Loading...', 'กำลังเตรียมคลิปสำหรับ Replay');
-    state.hasClip = false;
-    state.currentTime = 0;
-    state.duration = 0;
-    state.isPlaying = false;
-    state.loopA = null;
-    state.loopB = null;
-    state.viewStart = 0;
-    state.viewWidth = 1;
-    state.speed = 1;
-    state.zoom = 1;
-    state.panXPct = 0;
-    state.panYPct = 0;
     const updatedAt = Date.now();
     try {
+      await validateReplacementBlob(file, { name: file.name, type: file.type, updatedAt });
+      state.hasClip = false;
+      state.currentTime = 0;
+      state.duration = 0;
+      state.isPlaying = false;
+      state.loopA = null;
+      state.loopB = null;
+      state.viewStart = 0;
+      state.viewWidth = 1;
+      state.speed = 1;
+      state.zoom = 1;
+      state.panXPct = 0;
+      state.panYPct = 0;
       await loadBlob(file, { name: file.name, type: file.type, updatedAt });
       await saveClip(file, updatedAt);
       post('clip:blob', { blob: file, meta: { name: file.name, type: file.type, updatedAt: state.clipVersion } });
@@ -600,16 +637,28 @@
       render();
     } catch (err) {
       console.warn(err);
-      state.hasClip = false;
-      state.isPlaying = false;
-      state.duration = 0;
-      state.currentTime = 0;
-      if (isUnsupportedVideoError(err)) showUnsupportedVideo({ name: file.name });
-      else {
+      if (hadClip && videoHasSource(video)) {
+        Object.assign(state, previousState);
+        setStatus(isUnsupportedVideoError(err) ? 'NEW CLIP UNSUPPORTED · CURRENT CLIP KEPT' : 'NEW CLIP FAILED · CURRENT CLIP KEPT');
+        setDropState('ready', previousState.clipName, 'คลิปเดิมยังพร้อมใช้งาน');
+      } else if (isUnsupportedVideoError(err)) {
+        state.hasClip = false;
+        state.isPlaying = false;
+        state.duration = 0;
+        state.currentTime = 0;
+        showUnsupportedVideo({ name: file.name });
+      } else {
+        state.hasClip = false;
+        state.isPlaying = false;
+        state.duration = 0;
+        state.currentTime = 0;
         setStatus('VIDEO LOAD FAILED');
         setDropState('ready', 'Video load failed', 'ลองเลือกไฟล์ใหม่อีกครั้ง');
       }
       render();
+    } finally {
+      isFileLoading = false;
+      renderButtons();
     }
   }
 
@@ -685,7 +734,7 @@
     const shouldSeek = force || now - lastScrubSeekAt >= SCRUB_SEEK_MS;
     const shouldBroadcast = force || now - lastScrubBroadcastAt >= SCRUB_BROADCAST_MS;
     if (shouldSeek) {
-      seekVideoTo(video, next, { fast: true, minDelta: 0.004 });
+      seekVideoTo(video, next, { minDelta: 0.004 });
       lastScrubSeekAt = now;
     }
     state.currentTime = next;
@@ -721,6 +770,93 @@
     setCurrentTime(finalTime, true, 'scrub-final', { minDelta: 0 });
     if (timelineWasPlaying) play();
     timelineWasPlaying = false;
+  }
+
+  function syncPlaybackPosition(target = video) {
+    if (!target || target !== video || suppress) return;
+    state.currentTime = target.currentTime || 0;
+    if (loopActive() && state.currentTime >= state.loopB - 0.012) {
+      seekVideoTo(target, state.loopA, { minDelta: 0 });
+      state.currentTime = state.loopA;
+      if (state.isPlaying) target.play().catch(() => {});
+    }
+    renderTimeline();
+  }
+
+  function publishScreenProgress(force = false) {
+    if (mode !== 'screen' || !video || !state.hasClip) return;
+    const now = Date.now();
+    if (!force && now - lastScreenProgressSentAt < SCREEN_PROGRESS_INTERVAL_MS) return;
+    lastScreenProgressSentAt = now;
+    post('screen:progress', {
+      clipVersion: state.clipVersion,
+      currentTime: video.currentTime || state.currentTime || 0,
+      duration: video.duration || state.duration || 0,
+      isPlaying: !video.paused && !video.ended,
+      playIntent: state.isPlaying,
+      speed: video.playbackRate || state.speed
+    });
+  }
+
+  function applyScreenProgress(payload = {}) {
+    if (mode !== 'control' || !state.hasClip) return;
+    if (payload.clipVersion && state.clipVersion && Number(payload.clipVersion) !== Number(state.clipVersion)) return;
+    const now = Date.now();
+    lastScreenProgressAt = now;
+    if (isFileLoading || dragKind || pendingScrubTime !== null) return;
+    state.currentTime = clamp(Number(payload.currentTime) || 0, 0, state.duration || Number(payload.duration) || 0);
+    state.duration = Number(payload.duration) || state.duration;
+    state.isPlaying = Boolean(payload.playIntent ?? payload.isPlaying);
+    if (payload.playIntent && !payload.isPlaying && now - lastScreenRecoveryAt >= SCREEN_RECOVERY_COOLDOWN_MS) {
+      lastScreenRecoveryAt = now;
+      broadcast('screen-recover');
+    }
+    if (video && !document.hidden) {
+      video.playbackRate = Number(payload.speed) || state.speed;
+      if (Math.abs((video.currentTime || 0) - state.currentTime) > 0.22) {
+        seekVideoTo(video, state.currentTime, { minDelta: 0 });
+      }
+      if (state.isPlaying && video.paused) {
+        video.play().catch(() => {});
+      } else if (!state.isPlaying && !video.paused) {
+        video.pause();
+      }
+    }
+    renderTimeline();
+    renderButtons();
+  }
+
+  function stopPlaybackUiTicker() {
+    if (playbackFrameId === null) return;
+    if (playbackFrameKind === 'video' && typeof video?.cancelVideoFrameCallback === 'function') {
+      video.cancelVideoFrameCallback(playbackFrameId);
+    } else {
+      cancelAnimationFrame(playbackFrameId);
+    }
+    playbackFrameId = null;
+    playbackFrameKind = '';
+  }
+
+  function schedulePlaybackUiTicker() {
+    if (mode !== 'control' || playbackFrameId !== null || !video || video.paused || !state.hasClip) return;
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      playbackFrameKind = 'video';
+      playbackFrameId = video.requestVideoFrameCallback(playbackUiTick);
+    } else {
+      playbackFrameKind = 'animation';
+      playbackFrameId = requestAnimationFrame(playbackUiTick);
+    }
+  }
+
+  function playbackUiTick(now) {
+    playbackFrameId = null;
+    playbackFrameKind = '';
+    if (mode !== 'control' || !video || video.paused || !state.hasClip) return;
+    if (now - lastPlaybackUiPaint >= PLAYBACK_UI_INTERVAL_MS) {
+      lastPlaybackUiPaint = now;
+      syncPlaybackPosition(video);
+    }
+    schedulePlaybackUiTicker();
   }
 
   async function play() {
@@ -843,10 +979,12 @@
     if (video) {
       video.playbackRate = state.speed;
       video.muted = !state.screenAudio;
-      wakeScreenVideo();
       const drift = Math.abs((video.currentTime || 0) - state.currentTime);
       const now = Date.now();
       const reason = next.reason || '';
+      if (reason === 'play' || reason === 'screen-ready' || reason === 'file') {
+        wakeScreenVideo({ allowReload: true });
+      }
       const isScrubPreview = reason === 'scrub-preview';
       const isLiveSeek = LIVE_SEEK_REASONS.has(reason);
       const driftLimit = reason === 'heartbeat' ? HEARTBEAT_DRIFT : PLAY_DRIFT;
@@ -859,7 +997,6 @@
       );
       if (shouldSeek) {
         const ok = seekVideoTo(video, state.currentTime, {
-          fast: isScrubPreview,
           minDelta: isScrubPreview ? 0.012 : 0
         });
         if (ok) {
@@ -958,8 +1095,14 @@
   }
 
   function renderButtons() {
-    if (els.btnPlay) els.btnPlay.disabled = state.isPlaying || !state.hasClip;
-    if (els.btnPause) els.btnPause.disabled = !state.isPlaying || !state.hasClip;
+    if (els.btnPlay) els.btnPlay.disabled = isFileLoading || state.isPlaying || !state.hasClip;
+    if (els.btnPause) els.btnPause.disabled = isFileLoading || !state.isPlaying || !state.hasClip;
+    [
+      els.btnSetA, els.btnSetB, els.btnClearLoop, els.btnJumpA, els.btnJumpB,
+      els.btnBack1, els.btnForward1, els.btnResetZoom
+    ].forEach((button) => {
+      if (button) button.disabled = isFileLoading || !state.hasClip;
+    });
   }
 
   function renderScreenOptions() {
@@ -1008,7 +1151,11 @@
         els.fileInput?.click();
       }
     });
-    els.fileInput?.addEventListener('change', (event) => handleFile(event.target.files?.[0]));
+    els.fileInput?.addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      handleFile(file);
+    });
     ['dragenter', 'dragover'].forEach((name) => els.dropZone?.addEventListener(name, (event) => {
       event.preventDefault();
       els.dropZone.classList.add('drag-over');
@@ -1034,6 +1181,9 @@
       button.addEventListener('click', () => setZoom(button.dataset.zoomPreset));
     });
     els.btnResetZoom?.addEventListener('click', resetZoom);
+    document.addEventListener('peps:replay-mode-change', (event) => {
+      if (event.detail?.mode === 'highlight' && state.isPlaying) pause();
+    });
 
     els.screenAudio?.addEventListener('change', () => {
       state.screenAudio = els.screenAudio.checked;
@@ -1052,10 +1202,10 @@
 
     els.btnOpenLinks?.addEventListener('click', () => openModal(els.modalLinks));
     els.btnCloseLinks?.addEventListener('click', () => closeModal(els.modalLinks));
-    els.btnOpenSponsor?.addEventListener('click', () => openModal(els.modalSponsor));
-    els.btnCloseSponsor?.addEventListener('click', () => closeModal(els.modalSponsor));
     els.modalLinks?.addEventListener('click', (event) => event.target === els.modalLinks && closeModal(els.modalLinks));
-    els.modalSponsor?.addEventListener('click', (event) => event.target === els.modalSponsor && closeModal(els.modalSponsor));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && els.modalLinks?.classList.contains('open')) closeModal(els.modalLinks);
+    });
     els.btnCopyScreen?.addEventListener('click', () => copyValue(els.linkInputScreen));
     els.btnCopyControl?.addEventListener('click', () => copyValue(els.linkInputControl));
     els.btnCopyScreenSource?.addEventListener('click', () => copyValue(els.sourceInputScreen));
@@ -1110,6 +1260,7 @@
       }
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
       move(event);
     }
 
@@ -1135,6 +1286,7 @@
       dragKind = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
       if (finishedKind === 'scrub' || finishedKind === 'A' || finishedKind === 'B') finishScrubSession();
     }
 
@@ -1160,6 +1312,7 @@
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
     }
 
     function move(event) {
@@ -1187,6 +1340,7 @@
       dragData = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
     }
 
     els.navHandleLeft?.addEventListener('pointerdown', (event) => begin('nav-left', event));
@@ -1225,6 +1379,7 @@
       els.panViewport.classList.add('dragging');
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
       move(event);
     }
 
@@ -1242,6 +1397,7 @@
       els.panViewport.classList.remove('dragging');
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
     }
 
     els.panFrame.addEventListener('pointerdown', begin);
@@ -1287,23 +1443,23 @@
     });
     target.addEventListener('timeupdate', () => {
       if (target !== video) return;
-      if (!suppress) state.currentTime = target.currentTime || 0;
-      if (loopActive() && state.currentTime >= state.loopB - 0.025) {
-        target.currentTime = state.loopA;
-        state.currentTime = state.loopA;
-        if (state.isPlaying) target.play().catch(() => {});
-      }
-      renderTimeline();
+      syncPlaybackPosition(target);
+      publishScreenProgress();
     });
     target.addEventListener('play', () => {
       if (target !== video) return;
       state.isPlaying = true;
       renderButtons();
+      schedulePlaybackUiTicker();
+      publishScreenProgress(true);
     });
     target.addEventListener('pause', () => {
       if (target !== video) return;
-      state.isPlaying = false;
+      const preservePlayIntent = document.hidden && state.isPlaying && !target.ended;
+      if (!preservePlayIntent) state.isPlaying = false;
       renderButtons();
+      stopPlaybackUiTicker();
+      publishScreenProgress(true);
     });
     target.addEventListener('error', () => {
       if (target !== video) return;
@@ -1342,6 +1498,7 @@
           await loadSaved(version);
         }
       }
+      if (mode === 'control' && msg.type === 'screen:progress') applyScreenProgress(msg.payload || {});
       if (mode === 'control' && msg.type === 'screen:ready') broadcast('screen-ready');
     });
   }
@@ -1351,7 +1508,12 @@
     clearInterval(syncTimer);
     syncTimer = setInterval(() => {
       if (!state.autoSync || !state.hasClip || !video || !hasControlLease()) return;
-      if (video.paused && !state.isPlaying) return;
+      if (Date.now() - lastScreenProgressAt < SCREEN_PROGRESS_STALE_MS) return;
+      if (video.paused) {
+        if (!state.isPlaying || document.hidden) return;
+        video.play().catch(() => {});
+        return;
+      }
       state.currentTime = video.currentTime || 0;
       state.duration = video.duration || state.duration;
       state.isPlaying = !video.paused;
@@ -1371,10 +1533,10 @@
     if (mode === 'screen') {
       post('screen:ready', { ready: true });
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) wakeScreenVideo();
+        if (!document.hidden) wakeScreenVideo({ force: true, allowReload: true });
       });
-      window.addEventListener('pageshow', wakeScreenVideo);
-      window.addEventListener('focus', wakeScreenVideo);
+      window.addEventListener('pageshow', () => wakeScreenVideo({ force: true, allowReload: true }));
+      window.addEventListener('focus', () => wakeScreenVideo({ force: true, allowReload: true }));
       document.addEventListener('click', () => {
         if (state.isPlaying && video?.paused) video.play().catch(() => {});
       }, { once: true });

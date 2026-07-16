@@ -1,12 +1,12 @@
 {
   "project": "Peps VAR Replay Studio",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "defaultMode": "control",
   "theme": {
-    "primary": "#ff8a1c",
-    "secondary": "#ffb347",
-    "accent": "#62d6ff",
-    "background": "#05070b"
+    "primary": "#ff5a00",
+    "secondary": "#ff8a36",
+    "accent": "#34c8ff",
+    "background": "#07090c"
   },
   "playback": {
     "speedMin": 0.25,
@@ -17,7 +17,9 @@
   "obs": {
     "controlQuery": "?mode=control",
     "screenQuery": "?mode=screen",
+    "highlightScreenQuery": "?mode=highlight-screen",
     "recommendedWidth": 1920,
-    "recommendedHeight": 1080
+    "recommendedHeight": 1080,
+    "keepSourceActiveWhenHidden": true
   }
 }

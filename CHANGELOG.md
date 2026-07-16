@@ -1,5 +1,21 @@
 # Changelog
 
+## V2.0.0
+
+- Redesign the Control Dock into clear VAR and Highlight workflows while keeping the PEPS orange and black visual identity.
+- Consolidate the UI into one responsive stylesheet and remove obsolete theme, logo, sponsor, and duplicate Highlight assets.
+- Add a Sources panel with copyable URLs and complete OBS setup text for Control Dock, VAR Screen, and Highlight Screen.
+- Make Timeline and A/B marker dragging seek the real video frame continuously and resume playback after release when appropriate.
+- Add smooth playback UI updates with `requestVideoFrameCallback` and reduce unnecessary sync work across multiple Docks.
+- Add Screen-to-Control progress feedback so the active OBS Source remains authoritative when Chromium throttles a hidden Dock.
+- Prevent stale Dock heartbeats from rewinding the Screen and recover Source playback when Chromium pauses it while play intent remains active.
+- Preserve playback intent across visibility changes and wake Sources without repeatedly reloading the video.
+- Validate new clips before replacing a working clip and reject unsupported HEVC/H.265 playback with a clear conversion path.
+- Keep double-buffered VAR playback to avoid flashes while opening or replacing clips.
+- Restore Highlight state from IndexedDB, synchronize late-opening Sources, and advance the playlist from Source-ended events.
+- Clear Highlight media and persisted state completely, and fix playlist indexes after removing clips.
+- Add responsive and real-media verification using the supplied OBS Replay clips converted to H.264.
+
 ## V1.8.0
 
 - Fix Highlight Source opened after clip selection showing ready but no video by loading the latest saved highlight clip from IndexedDB on startup.

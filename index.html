@@ -4,217 +4,339 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>Peps VAR Replay Studio</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%2300aaff%22/%3E%3Ctext x=%2232%22 y=%2239%22 text-anchor=%22middle%22 font-size=%2222%22 font-family=%22Arial%22 font-weight=%22700%22 fill=%22%23000810%22%3EVAR%3C/text%3E%3C/svg%3E" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/var-replay.css?v=1.8.0" />
-  <link rel="stylesheet" href="assets/pepslive-theme.css" />
-  <link rel="stylesheet" href="assets/highlight-replay.css" />
-  <link rel="stylesheet" href="assets/peps-brand-logo.css" />
-  <link rel="stylesheet" href="assets/peps-brand-logo-fix.css" />
+  <title>PEPS Replay Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2210%22 fill=%22%23ff5a00%22/%3E%3Ctext x=%2232%22 y=%2239%22 text-anchor=%22middle%22 font-size=%2221%22 font-family=%22Arial%22 font-weight=%22700%22 fill=%22%2307090c%22%3EVAR%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/var-replay.css?v=2.0.0" />
 </head>
 <body data-replay-mode="var">
-  <div class="bg-fx" aria-hidden="true">
-    <div class="grid-scan"></div>
-    <div class="speed-lines"></div>
-    <span class="particle"></span>
-    <span class="particle"></span>
-    <span class="particle"></span>
-    <span class="particle"></span>
-  </div>
-
-  <header class="app-header control-only" aria-label="Application header">
-    <div class="peps-brand-header" aria-label="PEPS LIVE PRODUCTION">
-      <div class="peps-brand-logo" role="img" aria-label="PEPS LIVE PRODUCTION">
-        <div class="peps-logo-box">
-          <div class="peps-logo-top">
-            <span class="peps-dot"></span>
-            <span class="peps-peps">PEPS</span>
-            <span class="peps-live">LIVE</span>
-          </div>
-          <div class="peps-logo-bottom">
-            <span>PRODUCTION</span>
-          </div>
+  <header class="studio-header control-only">
+    <div class="studio-header-inner">
+      <div class="brand-lockup">
+        <div class="brand-wordmark" role="img" aria-label="PEPS LIVE PRODUCTION">
+          <span class="brand-peps">PEPS</span>
+          <span class="brand-live">LIVE</span>
+          <small>PRODUCTION</small>
+        </div>
+        <div class="product-lockup">
+          <strong>Replay Studio</strong>
+          <span>VAR + Highlight Control</span>
         </div>
       </div>
-      <div class="peps-brand-subline">VAR • REPLAY • HIGHLIGHT</div>
+      <div class="header-state">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="version-chip">V2.0</span>
+      </div>
     </div>
-    <div class="logo-header-main">OBS VAR REPLAY</div>
-    <div class="logo-header-sub">PEPS CONTROL CENTER V1.8</div>
   </header>
 
-  <main id="controlsUi" class="control-mode control-only" aria-label="VAR replay control panel">
+  <main id="controlsUi" class="control-mode control-only" aria-label="Replay control panel">
     <input id="fileInput" type="file" accept="video/*" hidden />
     <input id="highlightFileInput" type="file" accept="video/*" multiple hidden />
 
-    <nav class="replay-mode-tabs" aria-label="Replay mode selector">
-      <button id="tabVarReplay" class="replay-mode-tab active" type="button">VAR Replay</button>
-      <button id="tabHighlightReplay" class="replay-mode-tab" type="button">Highlight Replay</button>
+    <nav class="replay-mode-tabs" aria-label="โหมดรีเพลย์">
+      <button id="tabVarReplay" class="replay-mode-tab active" type="button">
+        <span class="tab-kicker">FRAME REVIEW</span>
+        <strong>VAR Replay</strong>
+      </button>
+      <button id="tabHighlightReplay" class="replay-mode-tab" type="button">
+        <span class="tab-kicker">PLAYLIST</span>
+        <strong>Highlight</strong>
+      </button>
     </nav>
 
-    <section id="dropZone" class="drop-zone var-panel" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์วิดีโอ">
-      <div class="drop-icon" aria-hidden="true">▣</div>
-      <b>คลิก</b> หรือ ลากไฟล์วิดีโอมาวางที่นี่<br />
-      <span id="dropText">รองรับทุกขนาดความยาวคลิป</span>
-    </section>
-
-    <div id="loopStatus" class="loop-status var-panel">LOOP A-B OFF</div>
-
-    <section class="timeline-wrapper var-panel" aria-label="Timeline controls">
-      <div id="timelineBox" class="timeline-container">
-        <div class="track-bg"></div>
-        <div id="trackWindow" class="track-window"></div>
-        <div id="trackLoop" class="track-loop"></div>
-        <div id="trackFill" class="track-fill"></div>
-
-        <button id="markA" class="marker marker-a" type="button" aria-label="Marker A">
-          <span class="marker-head">A</span>
-        </button>
-        <button id="markB" class="marker marker-b" type="button" aria-label="Marker B">
-          <span class="marker-head">B</span>
-        </button>
-        <div id="clickLayer" class="click-layer" aria-hidden="true"></div>
-      </div>
-
-      <div class="time-readout">
-        <span id="currTime">0:00</span>
-        <span id="totalTime">0:00</span>
-      </div>
-
-      <div id="navBox" class="navigator-container" aria-label="Timeline navigator">
-        <div id="navPlayhead" class="nav-playhead"></div>
-        <div id="navWindow" class="nav-window">
-          <button id="navHandleLeft" class="nav-handle left" type="button" aria-label="Navigator start"></button>
-          <button id="navHandleRight" class="nav-handle right" type="button" aria-label="Navigator end"></button>
+    <div id="varWorkspace" class="workspace var-workspace">
+      <section class="workflow-section var-panel" aria-labelledby="clipStepTitle">
+        <div class="section-heading">
+          <span class="step-index">01</span>
+          <div>
+            <span class="section-kicker">INPUT</span>
+            <h2 id="clipStepTitle">คลิปรีเพลย์</h2>
+          </div>
         </div>
-      </div>
-      <div class="navigator-caption">Navigator: ลากขอบเพื่อซูม Timeline / ลากกลางเพื่อเลื่อนช่วง</div>
-    </section>
 
-    <section class="btn-grid var-panel" aria-label="Playback buttons">
-      <button id="btnPlay" class="btn-play" type="button">▶ PLAY</button>
-      <button id="btnPause" class="btn-pause" type="button">⏸ PAUSE</button>
-      <button id="btnSetA" type="button">SET A</button>
-      <button id="btnSetB" type="button">SET B</button>
-    </section>
-
-    <button id="btnClearLoop" class="clear-loop-btn var-panel" type="button">CLEAR LOOP</button>
-
-    <section class="slider-row speed-row var-panel" aria-label="Speed control">
-      <div class="slider-label-line">
-        <span>SPEED: <strong id="speedVal">1.0x</strong></span>
-        <span id="statusText">READY</span>
-      </div>
-      <input id="speedRange" type="range" min="0.01" max="2.0" step="0.01" value="1.0" />
-    </section>
-
-    <section class="pan-control-wrapper var-panel" aria-label="Pan and zoom control">
-      <div class="v-slider-cont">
-        <span>ZOOM</span>
-        <input id="zoomRange" class="v-slider" type="range" min="1.0" max="10.0" step="0.1" value="1.0" orient="vertical" />
-        <strong id="zoomVal">1.0x</strong>
-      </div>
-
-      <div class="pan-area-cont">
-        <div id="panFrame" class="pan-frame">
-          <div id="panGrid" class="pan-grid"></div>
-          <div id="panViewport" class="pan-viewport" tabindex="0" role="slider" aria-label="Drag viewport to pan"></div>
-        </div>
-        <div class="zoom-preset-row" aria-label="Quick zoom presets">
-          <button data-zoom-preset="1" class="active" type="button">1x</button>
-          <button data-zoom-preset="2" type="button">2x</button>
-          <button data-zoom-preset="5" type="button">5x</button>
-          <button data-zoom-preset="10" type="button">10x</button>
-        </div>
-        <button id="btnResetZoom" class="reset-zoom-btn" type="button">↺ Reset Zoom & Position</button>
-      </div>
-    </section>
-
-    <section class="utility-panel var-panel" aria-label="Utility commands">
-      <button id="btnJumpA" type="button">Jump A</button>
-      <button id="btnJumpB" type="button">Jump B</button>
-      <button id="btnBack1" type="button">−1s</button>
-      <button id="btnForward1" type="button">+1s</button>
-    </section>
-
-    <section id="highlightPanel" class="highlight-panel" aria-label="Highlight replay panel">
-      <section id="highlightDropZone" class="highlight-card highlight-drop" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์ไฮไลท์หลายไฟล์">
-        <div>
-          <strong>ลากคลิป Highlight หลายไฟล์มาวางที่นี่</strong>
-          <span>รองรับ MP4 / MOV / WebM • เล่นเรียงหรือสุ่มและวนได้ไม่สิ้นสุด</span>
+        <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="เลือกหรือลากไฟล์วิดีโอ">
+          <video id="controlVideo" class="control-video-engine" muted playsinline preload="metadata"></video>
+          <div class="drop-zone-content">
+            <span class="drop-icon" aria-hidden="true">+</span>
+            <strong id="dropTitle">เลือกคลิป</strong>
+            <span id="dropText">H.264 MP4 · MOV · WebM</span>
+          </div>
         </div>
       </section>
 
-      <section class="highlight-card highlight-status-grid">
-        <div class="highlight-mini-box wide">
-          <span>Now Playing</span>
-          <strong id="highlightNowPlaying">ยังไม่มีคลิป</strong>
+      <section class="workflow-section var-panel" aria-labelledby="reviewStepTitle">
+        <div class="section-heading section-heading-split">
+          <div class="section-heading-main">
+            <span class="step-index">02</span>
+            <div>
+              <span class="section-kicker">REVIEW</span>
+              <h2 id="reviewStepTitle">ตรวจดูเฟรม</h2>
+            </div>
+          </div>
+          <span id="statusText" class="status-badge">READY</span>
         </div>
-        <div class="highlight-mini-box">
-          <span>Clips</span>
-          <strong id="highlightClipCount">0</strong>
+
+        <div class="timeline-wrapper" aria-label="Timeline controls">
+          <div class="time-readout">
+            <span id="currTime">0:00</span>
+            <span id="totalTime">0:00</span>
+          </div>
+
+          <div id="timelineBox" class="timeline-container">
+            <div class="track-bg"></div>
+            <div id="trackWindow" class="track-window"></div>
+            <div id="trackLoop" class="track-loop"></div>
+            <div id="trackFill" class="track-fill"></div>
+            <button id="markA" class="marker marker-a" type="button" aria-label="Marker A">
+              <span class="marker-head">A</span>
+            </button>
+            <button id="markB" class="marker marker-b" type="button" aria-label="Marker B">
+              <span class="marker-head">B</span>
+            </button>
+            <div id="clickLayer" class="click-layer" aria-hidden="true"></div>
+          </div>
+
+          <div id="navBox" class="navigator-container" aria-label="Timeline navigator">
+            <div id="navPlayhead" class="nav-playhead"></div>
+            <div id="navWindow" class="nav-window">
+              <button id="navHandleLeft" class="nav-handle left" type="button" aria-label="ขอบซ้ายของช่วง Timeline"></button>
+              <button id="navHandleRight" class="nav-handle right" type="button" aria-label="ขอบขวาของช่วง Timeline"></button>
+            </div>
+          </div>
         </div>
-        <div class="highlight-mini-box">
-          <span>Next</span>
-          <strong id="highlightNextClip">-</strong>
+
+        <div class="transport-row" aria-label="Playback controls">
+          <button id="btnBack1" class="icon-command" type="button" title="ย้อนกลับ 1 วินาที">−1s</button>
+          <button id="btnPlay" class="primary-command" type="button"><span aria-hidden="true">▶</span> เล่น</button>
+          <button id="btnPause" class="icon-command" type="button" title="หยุดชั่วคราว"><span aria-hidden="true">Ⅱ</span></button>
+          <button id="btnForward1" class="icon-command" type="button" title="เดินหน้า 1 วินาที">+1s</button>
+        </div>
+
+        <div class="range-control">
+          <div class="range-control-head">
+            <label for="speedRange">ความเร็ว</label>
+            <strong id="speedVal">1.0x</strong>
+          </div>
+          <input id="speedRange" type="range" min="0.01" max="2.0" step="0.01" value="1.0" />
         </div>
       </section>
 
-      <section class="highlight-card highlight-controls" aria-label="Highlight playback controls">
-        <button id="highlightPlay" class="primary" type="button">▶ PLAY</button>
-        <button id="highlightPause" type="button">⏸ PAUSE</button>
-        <button id="highlightRestart" type="button">↺ RESTART</button>
-        <button id="highlightPrev" type="button">PREV</button>
-        <button id="highlightNext" type="button">NEXT</button>
-        <button id="highlightClear" class="danger" type="button">CLEAR</button>
+      <section class="workflow-section var-panel" aria-labelledby="markStepTitle">
+        <div class="section-heading section-heading-split">
+          <div class="section-heading-main">
+            <span class="step-index">03</span>
+            <div>
+              <span class="section-kicker">DECISION</span>
+              <h2 id="markStepTitle">กำหนดช่วงรีเพลย์</h2>
+            </div>
+          </div>
+          <span id="loopStatus" class="loop-status">A–B OFF</span>
+        </div>
+
+        <div class="marker-action-grid">
+          <div class="marker-action marker-a-action">
+            <span class="marker-key">A</span>
+            <button id="btnSetA" class="marker-set" type="button">ตั้งจุดเริ่ม</button>
+            <button id="btnJumpA" class="marker-jump" type="button">ไปที่ A</button>
+          </div>
+          <div class="marker-action marker-b-action">
+            <span class="marker-key">B</span>
+            <button id="btnSetB" class="marker-set" type="button">ตั้งจุดจบ</button>
+            <button id="btnJumpB" class="marker-jump" type="button">ไปที่ B</button>
+          </div>
+        </div>
+        <button id="btnClearLoop" class="clear-loop-btn" type="button">ล้างช่วง A–B</button>
       </section>
 
-      <section class="highlight-card">
-        <div class="highlight-toggle-row">
-          <button id="highlightSequential" class="active" type="button">Sequential</button>
-          <button id="highlightRandom" type="button">Random</button>
+      <details class="workflow-section advanced-panel var-panel">
+        <summary>
+          <span>
+            <span class="section-kicker">ADVANCED</span>
+            <strong>ซูมและจัดตำแหน่ง</strong>
+          </span>
+          <span id="zoomVal" class="summary-value">1.0x</span>
+        </summary>
+
+        <div class="advanced-content">
+          <div class="zoom-toolbar">
+            <label for="zoomRange">Zoom</label>
+            <input id="zoomRange" type="range" min="1.0" max="10.0" step="0.1" value="1.0" />
+          </div>
+
+          <div id="panFrame" class="pan-frame">
+            <div id="panGrid" class="pan-grid"></div>
+            <div id="panViewport" class="pan-viewport" tabindex="0" role="slider" aria-label="ลากเพื่อจัดตำแหน่งภาพ"></div>
+          </div>
+
+          <div class="zoom-preset-row" aria-label="ระดับซูมด่วน">
+            <button data-zoom-preset="1" class="active" type="button">1x</button>
+            <button data-zoom-preset="2" type="button">2x</button>
+            <button data-zoom-preset="5" type="button">5x</button>
+            <button data-zoom-preset="10" type="button">10x</button>
+          </div>
+          <button id="btnResetZoom" class="reset-zoom-btn" type="button">รีเซ็ตภาพ</button>
         </div>
-        <label class="highlight-loop-line">
-          <input id="highlightLoop" type="checkbox" checked />
-          Loop Playlist ไม่สิ้นสุด
-        </label>
+      </details>
+    </div>
+
+    <section id="highlightPanel" class="workspace highlight-panel" aria-label="Highlight replay panel">
+      <section class="workflow-section" aria-labelledby="highlightInputTitle">
+        <div class="section-heading">
+          <span class="step-index">01</span>
+          <div>
+            <span class="section-kicker">PLAYLIST INPUT</span>
+            <h2 id="highlightInputTitle">คลิป Highlight</h2>
+          </div>
+        </div>
+        <div id="highlightDropZone" class="drop-zone highlight-drop" tabindex="0" role="button" aria-label="เลือกหรือลากคลิป Highlight หลายไฟล์">
+          <div class="drop-zone-content">
+            <span class="drop-icon" aria-hidden="true">+</span>
+            <strong>เพิ่มคลิป</strong>
+            <span>เลือกพร้อมกันได้หลายไฟล์</span>
+          </div>
+        </div>
       </section>
 
-      <section class="highlight-card">
-        <div class="highlight-speed-head">
-          <span>HIGHLIGHT SPEED</span>
-          <strong id="highlightSpeedLabel">1.0x</strong>
+      <section class="workflow-section" aria-labelledby="highlightPlaybackTitle">
+        <div class="section-heading section-heading-split">
+          <div class="section-heading-main">
+            <span class="step-index">02</span>
+            <div>
+              <span class="section-kicker">NOW PLAYING</span>
+              <h2 id="highlightPlaybackTitle">ควบคุมการเล่น</h2>
+            </div>
+          </div>
+          <span class="clip-count"><strong id="highlightClipCount">0</strong> CLIPS</span>
         </div>
-        <input id="highlightSpeedRange" type="range" min="0.25" max="2.0" step="0.05" value="1.0" />
-        <div class="highlight-speed-presets">
-          <button data-highlight-speed="0.5" type="button">0.5x</button>
-          <button data-highlight-speed="0.75" type="button">0.75x</button>
-          <button data-highlight-speed="1" class="active" type="button">1.0x</button>
-          <button data-highlight-speed="1.5" type="button">1.5x</button>
+
+        <div class="now-playing-strip">
+          <div>
+            <span>กำลังเล่น</span>
+            <strong id="highlightNowPlaying">ยังไม่มีคลิป</strong>
+          </div>
+          <div>
+            <span>ถัดไป</span>
+            <strong id="highlightNextClip">–</strong>
+          </div>
+        </div>
+
+        <div class="highlight-transport" aria-label="Highlight playback controls">
+          <button id="highlightPrev" class="icon-command" type="button" title="คลิปก่อนหน้า">←</button>
+          <button id="highlightPlay" class="primary-command" type="button"><span aria-hidden="true">▶</span> เล่น</button>
+          <button id="highlightPause" class="icon-command" type="button" title="หยุดชั่วคราว"><span aria-hidden="true">Ⅱ</span></button>
+          <button id="highlightNext" class="icon-command" type="button" title="คลิปถัดไป">→</button>
+          <button id="highlightRestart" class="icon-command" type="button" title="เริ่มคลิปใหม่">↺</button>
         </div>
       </section>
 
-      <section class="highlight-card">
+      <section class="workflow-section" aria-labelledby="playlistTitle">
+        <div class="section-heading section-heading-split">
+          <div class="section-heading-main">
+            <span class="step-index">03</span>
+            <div>
+              <span class="section-kicker">QUEUE</span>
+              <h2 id="playlistTitle">ลำดับคลิป</h2>
+            </div>
+          </div>
+          <button id="highlightClear" class="text-danger" type="button">ล้างทั้งหมด</button>
+        </div>
         <div id="highlightPlaylist" class="highlight-playlist">
-          <div class="highlight-empty">ยังไม่มี Playlist — ลากคลิปหลายไฟล์เข้ามาได้เลย</div>
+          <div class="highlight-empty">ยังไม่มีคลิปใน Playlist</div>
         </div>
       </section>
 
-      <video id="highlightVideo" muted playsinline preload="metadata" hidden></video>
+      <details class="workflow-section advanced-panel highlight-options">
+        <summary>
+          <span>
+            <span class="section-kicker">PLAYBACK OPTIONS</span>
+            <strong>รูปแบบการเล่น</strong>
+          </span>
+          <span class="summary-value">ตั้งค่า</span>
+        </summary>
+        <div class="advanced-content">
+          <div class="segmented-control" aria-label="ลำดับการเล่น">
+            <button id="highlightSequential" class="active" type="button">ตามลำดับ</button>
+            <button id="highlightRandom" type="button">สุ่ม</button>
+          </div>
+
+          <label class="switch-row">
+            <span>
+              <strong>วน Playlist</strong>
+              <small>เล่นต่อเนื่องเมื่อถึงคลิปสุดท้าย</small>
+            </span>
+            <input id="highlightLoop" type="checkbox" checked />
+          </label>
+
+          <div class="range-control">
+            <div class="range-control-head">
+              <label for="highlightSpeedRange">ความเร็ว Highlight</label>
+              <strong id="highlightSpeedLabel">1.0x</strong>
+            </div>
+            <input id="highlightSpeedRange" type="range" min="0.25" max="2.0" step="0.05" value="1.0" />
+            <div class="highlight-speed-presets">
+              <button data-highlight-speed="0.5" type="button">0.5x</button>
+              <button data-highlight-speed="0.75" type="button">0.75x</button>
+              <button data-highlight-speed="1" class="active" type="button">1.0x</button>
+              <button data-highlight-speed="1.5" type="button">1.5x</button>
+            </div>
+          </div>
+
+          <div class="transition-control">
+            <div class="range-control-head">
+              <span>Transition</span>
+              <strong id="highlightTransitionLabel">Fade</strong>
+            </div>
+            <div id="highlightTransitionGrid" class="highlight-transition-grid">
+              <button type="button" data-highlight-transition="fade" class="active">Fade</button>
+              <button type="button" data-highlight-transition="slide-left">Slide L</button>
+              <button type="button" data-highlight-transition="slide-right">Slide R</button>
+              <button type="button" data-highlight-transition="zoom-pop">Zoom Pop</button>
+              <button type="button" data-highlight-transition="flash-cut">Flash</button>
+              <button type="button" data-highlight-transition="blur-sweep">Blur</button>
+            </div>
+            <div class="range-control-head duration-head">
+              <label for="highlightTransitionDurationRange">ระยะเวลา</label>
+              <strong id="highlightTransitionDurationLabel">1.0s</strong>
+            </div>
+            <input id="highlightTransitionDurationRange" type="range" min="0.5" max="5" step="0.1" value="1" />
+          </div>
+        </div>
+      </details>
+
+      <video id="highlightVideo" class="highlight-video-engine" muted playsinline preload="metadata"></video>
     </section>
 
-    <section class="toggle-panel" aria-label="Screen options">
-      <label><input id="screenAudio" type="checkbox" /> ส่งเสียงไปที่ Screen</label>
-      <label><input id="showStatus" type="checkbox" checked /> แสดงสถานะบน Screen</label>
-      <label><input id="autoSync" type="checkbox" checked /> Sync อัตโนมัติ</label>
-    </section>
+    <details class="output-settings">
+      <summary>
+        <span>
+          <span class="section-kicker">OUTPUT</span>
+          <strong>Screen และ Sync</strong>
+        </span>
+        <span class="output-ready"><span aria-hidden="true"></span>พร้อม</span>
+      </summary>
+      <div class="output-settings-content">
+        <label class="switch-row">
+          <span><strong>เสียงที่ Screen</strong><small>เปิดเสียงใน OBS Browser Source</small></span>
+          <input id="screenAudio" type="checkbox" />
+        </label>
+        <label class="switch-row">
+          <span><strong>สถานะบน Screen</strong><small>แสดงข้อความโหลดและการเชื่อมต่อ</small></span>
+          <input id="showStatus" type="checkbox" checked />
+        </label>
+        <label class="switch-row">
+          <span><strong>Auto Sync</strong><small>รักษาเวลา Control และ Screen ให้ตรงกัน</small></span>
+          <input id="autoSync" type="checkbox" checked />
+        </label>
+      </div>
+    </details>
 
-    <section class="menu-bar" aria-label="Menu buttons">
-      <button id="btnOpenLinks" class="btn-outline" type="button">Get Link</button>
-      <button id="btnOpenSponsor" class="btn-outline sponsor" type="button">Sponsor</button>
-    </section>
+    <footer class="action-footer">
+      <button id="btnOpenLinks" class="sources-command" type="button">
+        <span aria-hidden="true">↗</span>
+        Sources
+      </button>
+      <a class="support-link" href="https://heylink.me/pepslive/" target="_blank" rel="noopener">PEPS LIVE</a>
+    </footer>
   </main>
 
   <main id="screenView" class="screen-mode screen-only" aria-label="OBS screen output">
@@ -227,65 +349,74 @@
 
   <div id="modalLinks" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="linkTitle">
     <div class="modal link-modal">
-      <button class="modal-close" id="btnCloseLinks" type="button" aria-label="Close">×</button>
-      <h2 id="linkTitle">Graphic Link (Screen)</h2>
-      <p>Copy URL หรือ Source Setup ไปสร้างใน OBS ได้ทันที</p>
-      <div class="link-source-grid">
-        <section class="link-source-card">
-          <div class="source-card-head">
-            <span>SCREEN OUTPUT</span>
-            <strong>Browser Source</strong>
-          </div>
-          <div class="copy-group">
-            <input id="linkInputScreen" class="copy-input" type="text" readonly />
-            <button id="btnCopyScreen" type="button">Copy URL</button>
-          </div>
-          <label class="source-copy-label" for="sourceInputScreen">OBS Source Setup</label>
-          <div class="copy-group source-copy-group">
-            <textarea id="sourceInputScreen" class="copy-input source-input" readonly></textarea>
-            <button id="btnCopyScreenSource" type="button">Copy Source</button>
-          </div>
-        </section>
-        <section class="link-source-card">
-          <div class="source-card-head">
-            <span>CONTROL DOCK</span>
-            <strong>Custom Browser Dock</strong>
+      <div class="modal-heading">
+        <div>
+          <span class="section-kicker">OBS SETUP</span>
+          <h2 id="linkTitle">Sources</h2>
+        </div>
+        <button class="modal-close" id="btnCloseLinks" type="button" aria-label="ปิด">×</button>
+      </div>
+
+      <div class="source-list">
+        <section class="source-row">
+          <div class="source-row-heading">
+            <span class="source-index">01</span>
+            <div><strong>Control Dock</strong><small>Custom Browser Dock</small></div>
           </div>
           <div class="copy-group">
             <input id="linkInputControl" class="copy-input" type="text" readonly />
             <button id="btnCopyControl" type="button">Copy URL</button>
           </div>
-          <label class="source-copy-label" for="sourceInputControl">OBS Dock Setup</label>
-          <div class="copy-group source-copy-group">
-            <textarea id="sourceInputControl" class="copy-input source-input" readonly></textarea>
-            <button id="btnCopyControlSource" type="button">Copy Source</button>
+          <details class="source-setup">
+            <summary>Source Setup</summary>
+            <div class="copy-group source-copy-group">
+              <textarea id="sourceInputControl" class="copy-input source-input" readonly></textarea>
+              <button id="btnCopyControlSource" type="button">Copy Setup</button>
+            </div>
+          </details>
+        </section>
+
+        <section class="source-row">
+          <div class="source-row-heading">
+            <span class="source-index">02</span>
+            <div><strong>VAR Screen</strong><small>Browser Source</small></div>
           </div>
+          <div class="copy-group">
+            <input id="linkInputScreen" class="copy-input" type="text" readonly />
+            <button id="btnCopyScreen" type="button">Copy URL</button>
+          </div>
+          <details class="source-setup">
+            <summary>Source Setup</summary>
+            <div class="copy-group source-copy-group">
+              <textarea id="sourceInputScreen" class="copy-input source-input" readonly></textarea>
+              <button id="btnCopyScreenSource" type="button">Copy Setup</button>
+            </div>
+          </details>
+        </section>
+
+        <section class="source-row">
+          <div class="source-row-heading">
+            <span class="source-index">03</span>
+            <div><strong>Highlight Screen</strong><small>Browser Source</small></div>
+          </div>
+          <div class="copy-group">
+            <input id="linkInputHighlight" class="copy-input" type="text" readonly />
+            <button id="btnCopyHighlight" type="button">Copy URL</button>
+          </div>
+          <details class="source-setup">
+            <summary>Source Setup</summary>
+            <div class="copy-group source-copy-group">
+              <textarea id="sourceInputHighlight" class="copy-input source-input" readonly></textarea>
+              <button id="btnCopyHighlightSource" type="button">Copy Setup</button>
+            </div>
+          </details>
         </section>
       </div>
-      <div id="copyMsg" class="copy-msg">Copied!</div>
+      <div id="copyMsg" class="copy-msg" role="status">Copied</div>
     </div>
   </div>
 
-  <div id="modalSponsor" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="sponsorTitle">
-    <div class="modal">
-      <button class="modal-close" id="btnCloseSponsor" type="button" aria-label="Close">×</button>
-      <h2 id="sponsorTitle" class="sponsor-title">Support PepsLive</h2>
-      <div class="sponsor-grid">
-        <div class="sponsor-item">
-          <strong>PepsLive / Pepsproduction</strong>
-          <p>เครื่องมือฟรีสำหรับสายไลฟ์กีฬา OBS Dock UI, Scoreboard, Tournament และ Replay Workflow</p>
-          <a class="sponsor-link" href="https://heylink.me/pepslive/" target="_blank" rel="noopener">heylink.me/pepslive</a>
-        </div>
-        <div class="sponsor-item dark">
-          <strong>VAR Replay Studio</strong>
-          <p>ออกแบบสำหรับเปิดเป็น Dock + Browser Source ใช้งานไวในสนามจริง</p>
-        </div>
-      </div>
-      <div class="version-note">Developed for PepsLive · V1.8</div>
-    </div>
-  </div>
-
-  <script src="assets/var-replay.js?v=1.8.0"></script>
-  <script src="assets/highlight-replay.js?v=1.8.0"></script>
+  <script src="assets/var-replay.js?v=2.0.0"></script>
+  <script src="assets/highlight-replay.js?v=2.0.0"></script>
 </body>
 </html>

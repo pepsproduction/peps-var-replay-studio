@@ -33,6 +33,9 @@
     loop: true,
     speed: 1,
     playing: false,
+    currentTime: 0,
+    clipToken: '',
+    clipName: '',
     shuffleBag: [],
     transition: 'fade',
     transitionDuration: 1
@@ -40,7 +43,15 @@
 
   let objectUrl = null;
   let screenObjectUrl = null;
-  let transitionTimer = null;
+  let persistTimer = null;
+  let lastTimelinePersistAt = 0;
+  let lastScreenWakeAt = 0;
+  let controlRestorePromise = Promise.resolve();
+  let lastSourceProgressAt = 0;
+  let lastAdvanceToken = '';
+  let lastAdvanceAt = 0;
+  let lastSourcePersistAt = 0;
+  let lastProgressBroadcastAt = 0;
 
   const els = {
     tabVar: $('#tabVarReplay'),
@@ -65,7 +76,11 @@
     playlist: $('#highlightPlaylist'),
     now: $('#highlightNowPlaying'),
     count: $('#highlightClipCount'),
-    nextName: $('#highlightNextClip')
+    nextName: $('#highlightNextClip'),
+    linkInput: $('#linkInputHighlight'),
+    sourceInput: $('#sourceInputHighlight'),
+    copyLink: $('#btnCopyHighlight'),
+    copySource: $('#btnCopyHighlightSource')
   };
 
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -119,7 +134,9 @@
       transition: meta.transition || 'fade',
       transitionDuration: Number(meta.transitionDuration) || 1,
       playing: !!meta.playing,
-      speed: Number(meta.speed) || 1
+      speed: Number(meta.speed) || 1,
+      currentTime: Math.max(0, Number(meta.currentTime) || 0),
+      clipToken: meta.clipToken || ''
     };
     const db = await openDB();
     await new Promise((resolve, reject) => {
@@ -144,71 +161,68 @@
     return row;
   }
 
-  function injectSourceLink() {
-    if (!isControl || $('#linkInputHighlight')) return;
-    const modal = $('#modalLinks .modal');
-    if (!modal) return;
-    const block = document.createElement('div');
-    block.className = 'highlight-source-link-block';
-    block.innerHTML = `
-      <hr />
-      <p>Highlight Source Link สำหรับ OBS Browser Source แยกจาก VAR</p>
-      <div class="copy-group">
-        <input id="linkInputHighlight" class="copy-input" type="text" readonly value="${highlightSourceUrl()}" />
-        <button id="btnCopyHighlight" type="button">Copy</button>
-      </div>
-      <div class="highlight-source-note">ใช้ลิงก์นี้กับ Source ไฮไลท์เท่านั้น ไม่ชนกับ VAR Source</div>
-    `;
-    modal.appendChild(block);
-    $('#btnCopyHighlight')?.addEventListener('click', async () => {
-      const input = $('#linkInputHighlight');
-      const value = input?.value || highlightSourceUrl();
-      try { await navigator.clipboard.writeText(value); }
-      catch { input?.focus(); input?.select(); document.execCommand('copy'); }
-      const msg = $('#copyMsg');
-      if (msg) { msg.textContent = 'Copied Highlight Source!'; msg.classList.add('show'); setTimeout(() => msg.classList.remove('show'), 1500); }
+  async function deleteClip() {
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(DB_KEY);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
     });
+    db.close();
   }
 
-  function injectTransitionUI() {
-    if (!isControl || $('#highlightTransitionGrid')) return;
-    const speedCard = $('#highlightSpeedRange')?.closest('.highlight-card');
-    if (!speedCard) return;
-    const card = document.createElement('section');
-    card.className = 'highlight-card';
-    card.innerHTML = `
-      <div class="highlight-transition-title">
-        <span>TRANSITION</span>
-        <strong id="highlightTransitionLabel">Fade</strong>
-      </div>
-      <div id="highlightTransitionGrid" class="highlight-transition-grid">
-        ${TRANSITIONS.map(([id, label]) => `<button type="button" data-highlight-transition="${id}" class="${id === state.transition ? 'active' : ''}">${label}</button>`).join('')}
-      </div>
-      <div class="highlight-transition-duration-head" style="margin-top:10px">
-        <span>DURATION</span>
-        <strong id="highlightTransitionDurationLabel">1.0s</strong>
-      </div>
-      <input id="highlightTransitionDurationRange" type="range" min="0.5" max="5" step="0.1" value="1" />
-    `;
-    speedCard.insertAdjacentElement('afterend', card);
-    card.addEventListener('click', (event) => {
+  function highlightSourceText() {
+    return [
+      'Source Name: Peps Highlight Screen',
+      'Type: Browser Source',
+      `URL: ${highlightSourceUrl()}`,
+      'Width: 1920',
+      'Height: 1080',
+      'OBS: Keep source active when hidden = ON'
+    ].join('\n');
+  }
+
+  function setupTransitionControls() {
+    $('#highlightTransitionGrid')?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-highlight-transition]');
       if (!button) return;
       state.transition = button.dataset.highlightTransition || 'fade';
       post('highlight:transition', { transition: state.transition, transitionDuration: state.transitionDuration });
+      schedulePersist();
       render();
     });
     $('#highlightTransitionDurationRange')?.addEventListener('input', (event) => {
       state.transitionDuration = clamp(Number(event.target.value) || 1, 0.5, 5);
       post('highlight:transition', { transition: state.transition, transitionDuration: state.transitionDuration });
+      schedulePersist();
       render();
     });
   }
 
+  async function copyHighlightValue(input, message) {
+    if (!input) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch {
+      input.focus();
+      input.select();
+      document.execCommand('copy');
+    }
+    const msg = $('#copyMsg');
+    if (!msg) return;
+    msg.textContent = message;
+    msg.classList.add('show');
+    setTimeout(() => msg.classList.remove('show'), 1500);
+  }
+
   function setMode(mode) {
     if (!isControl) return;
-    state.mode = mode === 'highlight' ? 'highlight' : 'var';
+    const nextMode = mode === 'highlight' ? 'highlight' : 'var';
+    if (state.mode === 'highlight' && nextMode === 'var' && state.playing) pause();
+    state.mode = nextMode;
     document.body.dataset.replayMode = state.mode;
+    document.dispatchEvent(new CustomEvent('peps:replay-mode-change', { detail: { mode: state.mode } }));
     post('highlight:mode', { mode: state.mode });
     render();
   }
@@ -218,9 +232,108 @@
   }
   function clearObjectUrl() { if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; }
 
+  function currentClip() {
+    return state.currentIndex >= 0 ? state.clips[state.currentIndex] || null : null;
+  }
+
+  function currentPlaybackTime() {
+    if (state.playing && els.video?.paused && Date.now() - lastSourceProgressAt < 2500) {
+      return Math.max(0, Number(state.currentTime) || 0);
+    }
+    return Math.max(0, Number(els.video?.currentTime) || Number(state.currentTime) || 0);
+  }
+
+  async function persistCurrentClip() {
+    const clip = currentClip();
+    if (!clip) return null;
+    state.currentTime = currentPlaybackTime();
+    return putClip(clip.file, {
+      name: clip.name,
+      type: clip.type,
+      transition: state.transition,
+      transitionDuration: state.transitionDuration,
+      playing: state.playing,
+      speed: state.speed,
+      currentTime: state.currentTime,
+      clipToken: state.clipToken
+    });
+  }
+
+  function schedulePersist(delay = 120) {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      persistTimer = null;
+      persistCurrentClip().catch((err) => console.warn('persist highlight state failed', err));
+    }, delay);
+  }
+
+  async function publishCurrentClip(reason = 'state') {
+    const clip = currentClip();
+    if (!clip) {
+      post('highlight:clear', { reason });
+      return;
+    }
+    try {
+      await persistCurrentClip();
+    } catch (err) {
+      console.warn('persist before publish failed', err);
+    }
+    post('highlight:clip', {
+      clip: { name: clip.name, type: clip.type },
+      speed: state.speed,
+      playing: state.playing,
+      currentTime: state.currentTime,
+      clipToken: state.clipToken,
+      transition: state.transition,
+      transitionDuration: state.transitionDuration,
+      version: Date.now(),
+      reason
+    });
+  }
+
+  async function restoreControlHighlight() {
+    if (!isControl || state.clips.length || !els.video) return;
+    try {
+      const row = await getClip();
+      if (!row?.blob || state.clips.length) return;
+      state.clips = [{
+        id: `restored-${Number(row.updatedAt) || Date.now()}`,
+        name: row.name || 'highlight-video',
+        type: row.type || row.blob.type || 'video/mp4',
+        file: row.blob
+      }];
+      state.currentIndex = 0;
+      state.clipToken = row.clipToken || state.clips[0].id;
+      state.clipName = state.clips[0].name;
+      state.speed = clamp(Number(row.speed) || 1, 0.25, 2);
+      state.transition = row.transition || 'fade';
+      state.transitionDuration = clamp(Number(row.transitionDuration) || 1, 0.5, 5);
+      state.currentTime = Math.max(0, Number(row.currentTime) || 0);
+      state.playing = false;
+      clearObjectUrl();
+      objectUrl = URL.createObjectURL(row.blob);
+      els.video.src = objectUrl;
+      els.video.load();
+      els.video.playbackRate = state.speed;
+      const applyPosition = () => {
+        const duration = Number.isFinite(els.video.duration) ? els.video.duration : state.currentTime;
+        try { els.video.currentTime = clamp(state.currentTime, 0, Math.max(0, duration || 0)); } catch {}
+      };
+      if (els.video.readyState >= 1) applyPosition();
+      else els.video.addEventListener('loadedmetadata', applyPosition, { once: true });
+      render();
+    } catch (err) {
+      console.warn('restore highlight control state failed', err);
+    }
+  }
+
   async function loadCurrent({ autoplay = state.playing } = {}) {
     if (!els.video || state.currentIndex < 0 || !state.clips[state.currentIndex]) return;
     const clip = state.clips[state.currentIndex];
+    state.clipToken = clip.id;
+    state.clipName = clip.name;
+    state.playing = Boolean(autoplay);
+    state.currentTime = 0;
     clearObjectUrl();
     objectUrl = URL.createObjectURL(clip.file);
     els.video.pause();
@@ -228,25 +341,10 @@
     els.video.load();
     els.video.playbackRate = state.speed;
     try {
-      await putClip(clip.file, {
-        name: clip.name,
-        type: clip.type,
-        transition: state.transition,
-        transitionDuration: state.transitionDuration,
-        playing: autoplay,
-        speed: state.speed
-      });
+      await publishCurrentClip('clip');
     } catch (err) {
-      console.warn('putClip failed', err);
+      console.warn('publish highlight clip failed', err);
     }
-    post('highlight:clip', {
-      clip: { name: clip.name, type: clip.type },
-      speed: state.speed,
-      playing: autoplay,
-      transition: state.transition,
-      transitionDuration: state.transitionDuration,
-      version: Date.now()
-    });
     render();
     if (autoplay) play();
   }
@@ -271,29 +369,130 @@
     return prev >= 0 ? prev : (state.loop ? state.clips.length - 1 : -1);
   }
 
+  function advanceAfterEnded(clipToken = state.clipToken) {
+    if (!state.playing) return;
+    if (clipToken && state.clipToken && clipToken !== state.clipToken) return;
+    const now = Date.now();
+    if (lastAdvanceToken === state.clipToken && now - lastAdvanceAt < 900) return;
+    lastAdvanceToken = state.clipToken;
+    lastAdvanceAt = now;
+    const index = getNextIndex();
+    if (index >= 0) goToIndex(index, true);
+    else pause();
+  }
+
+  function applySourceProgress(payload = {}) {
+    if (!isControl || !currentClip()) return;
+    if (payload.clipToken && state.clipToken && payload.clipToken !== state.clipToken) return;
+    state.currentTime = Math.max(0, Number(payload.currentTime) || 0);
+    const now = Date.now();
+    lastSourceProgressAt = now;
+    if (now - lastSourcePersistAt >= 1500) {
+      lastSourcePersistAt = now;
+      schedulePersist(0);
+    }
+    if (!document.hidden && state.playing && els.video) {
+      if (Math.abs((els.video.currentTime || 0) - state.currentTime) > 0.22) {
+        try { els.video.currentTime = state.currentTime; } catch {}
+      }
+      if (els.video.paused) {
+        els.video.playbackRate = state.speed;
+        els.video.play().catch(() => {});
+      }
+    }
+  }
+
+  function resumeHighlightControl() {
+    if (!isControl || !state.playing || !currentClip() || !els.video) return;
+    try { els.video.currentTime = state.currentTime; } catch {}
+    els.video.playbackRate = state.speed;
+    els.video.play().catch(() => {});
+  }
+
   async function play() {
     if (!els.video || state.currentIndex < 0) return;
     state.playing = true;
     els.video.playbackRate = state.speed;
-    try { await els.video.play(); post('highlight:play', { speed: state.speed }); }
-    catch (err) { state.playing = false; console.warn(err); }
+    try {
+      await els.video.play();
+      state.currentTime = currentPlaybackTime();
+      post('highlight:play', { speed: state.speed, currentTime: state.currentTime });
+      schedulePersist();
+    }
+    catch (err) {
+      state.playing = false;
+      post('highlight:pause', { currentTime: currentPlaybackTime() });
+      schedulePersist();
+      console.warn(err);
+    }
     render();
   }
-  function pause() { state.playing = false; els.video?.pause(); post('highlight:pause'); render(); }
+  function pause() {
+    state.playing = false;
+    state.currentTime = currentPlaybackTime();
+    els.video?.pause();
+    post('highlight:pause', { currentTime: state.currentTime });
+    schedulePersist();
+    render();
+  }
   function restart() {
     if (!els.video || state.currentIndex < 0) return;
     els.video.currentTime = 0;
-    post('highlight:restart', { speed: state.speed, transition: state.transition, transitionDuration: state.transitionDuration });
+    state.currentTime = 0;
+    post('highlight:restart', {
+      speed: state.speed,
+      playing: state.playing,
+      transition: state.transition,
+      transitionDuration: state.transitionDuration
+    });
+    schedulePersist();
     if (state.playing) play();
   }
   function goToIndex(index, autoplay = state.playing) { if (index < 0 || index >= state.clips.length) { pause(); return; } state.currentIndex = index; loadCurrent({ autoplay }); }
   function next() { goToIndex(getNextIndex(), state.playing); }
   function prev() { goToIndex(getPrevIndex(), state.playing); }
-  function setSpeed(speed) { state.speed = clamp(Number(speed) || 1, 0.25, 2); if (els.video) els.video.playbackRate = state.speed; post('highlight:speed', { speed: state.speed }); render(); }
+  function setSpeed(speed) {
+    state.speed = clamp(Number(speed) || 1, 0.25, 2);
+    if (els.video) els.video.playbackRate = state.speed;
+    post('highlight:speed', { speed: state.speed });
+    schedulePersist();
+    render();
+  }
   function setOrder(mode) { state.orderMode = mode === 'random' ? 'random' : 'sequential'; state.shuffleBag = []; render(); }
   function addFiles(fileList) { const files = Array.from(fileList || []).filter((f) => f.type.startsWith('video/')); if (!files.length) return; const empty = !state.clips.length; state.clips.push(...files.map(makeClip)); if (empty) { state.currentIndex = 0; loadCurrent({ autoplay: false }); } render(); }
-  function clearPlaylist() { pause(); clearObjectUrl(); state.clips = []; state.currentIndex = -1; state.shuffleBag = []; if (els.video) els.video.removeAttribute('src'); post('highlight:clear'); render(); }
-  function removeClip(index) { const wasCurrent = index === state.currentIndex; state.clips.splice(index, 1); if (!state.clips.length) return clearPlaylist(); if (state.currentIndex >= state.clips.length) state.currentIndex = 0; if (wasCurrent) loadCurrent({ autoplay: state.playing }); render(); }
+  async function clearPlaylist() {
+    state.playing = false;
+    state.currentTime = 0;
+    clearTimeout(persistTimer);
+    persistTimer = null;
+    els.video?.pause();
+    clearObjectUrl();
+    state.clips = [];
+    state.currentIndex = -1;
+    state.clipToken = '';
+    state.clipName = '';
+    state.shuffleBag = [];
+    if (els.video) {
+      els.video.removeAttribute('src');
+      els.video.load();
+    }
+    try { await deleteClip(); } catch (err) { console.warn('delete highlight clip failed', err); }
+    post('highlight:clear');
+    render();
+  }
+  function removeClip(index) {
+    if (index < 0 || index >= state.clips.length) return;
+    const wasCurrent = index === state.currentIndex;
+    state.clips.splice(index, 1);
+    if (!state.clips.length) {
+      clearPlaylist();
+      return;
+    }
+    if (index < state.currentIndex) state.currentIndex -= 1;
+    if (state.currentIndex >= state.clips.length) state.currentIndex = state.clips.length - 1;
+    if (wasCurrent) loadCurrent({ autoplay: state.playing });
+    else render();
+  }
 
   function nextClipName() {
     if (!state.clips.length || state.currentIndex < 0) return '-';
@@ -303,12 +502,12 @@
   }
   function renderPlaylist() {
     if (!els.playlist) return;
-    if (!state.clips.length) { els.playlist.innerHTML = '<div class="highlight-empty">ยังไม่มี Playlist — ลากคลิปหลายไฟล์เข้ามาได้เลย</div>'; return; }
+    if (!state.clips.length) { els.playlist.innerHTML = '<div class="highlight-empty">ยังไม่มีคลิปใน Playlist</div>'; return; }
     els.playlist.innerHTML = state.clips.map((clip, i) => `
       <div class="highlight-playlist-item ${i === state.currentIndex ? 'active' : ''}">
         <span class="index">${i + 1}</span>
         <button class="name" type="button" data-pick-index="${i}" title="${escapeHtml(clip.name)}">${escapeHtml(clip.name)}</button>
-        <button class="remove" type="button" data-remove-index="${i}">×</button>
+        <button class="remove" type="button" data-remove-index="${i}" aria-label="ลบ ${escapeHtml(clip.name)}">×</button>
       </div>`).join('');
   }
   function render() {
@@ -331,20 +530,24 @@
     const durationLabel = $('#highlightTransitionDurationLabel');
     if (durationRange) durationRange.value = String(state.transitionDuration);
     if (durationLabel) durationLabel.textContent = niceSeconds(state.transitionDuration);
-    const link = $('#linkInputHighlight');
-    if (link) link.value = highlightSourceUrl();
+    if (els.linkInput) els.linkInput.value = highlightSourceUrl();
+    if (els.sourceInput) els.sourceInput.value = highlightSourceText();
     renderPlaylist();
   }
 
   function setupControl() {
     if (!isControl) return;
-    injectSourceLink();
-    injectTransitionUI();
+    setupTransitionControls();
+    controlRestorePromise = restoreControlHighlight();
     els.tabVar?.addEventListener('click', () => setMode('var'));
     els.tabHighlight?.addEventListener('click', () => setMode('highlight'));
     els.dropZone?.addEventListener('click', () => els.fileInput?.click());
     els.dropZone?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') els.fileInput?.click(); });
-    els.fileInput?.addEventListener('change', (e) => addFiles(e.target.files));
+    els.fileInput?.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      addFiles(files);
+    });
     ['dragenter', 'dragover'].forEach((name) => els.dropZone?.addEventListener(name, (e) => { e.preventDefault(); els.dropZone.classList.add('drag-over'); }));
     ['dragleave', 'drop'].forEach((name) => els.dropZone?.addEventListener(name, (e) => { e.preventDefault(); els.dropZone.classList.remove('drag-over'); }));
     els.dropZone?.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
@@ -354,7 +557,31 @@
     els.speedRange?.addEventListener('input', () => setSpeed(els.speedRange.value));
     document.querySelectorAll('[data-highlight-speed]').forEach((b) => b.addEventListener('click', () => setSpeed(b.dataset.highlightSpeed)));
     els.playlist?.addEventListener('click', (e) => { const pick = e.target.closest('[data-pick-index]'); const remove = e.target.closest('[data-remove-index]'); if (pick) goToIndex(Number(pick.dataset.pickIndex), state.playing); if (remove) removeClip(Number(remove.dataset.removeIndex)); });
-    els.video?.addEventListener('ended', () => { const i = getNextIndex(); if (i >= 0) goToIndex(i, true); else pause(); });
+    els.video?.addEventListener('ended', () => advanceAfterEnded(state.clipToken));
+    els.video?.addEventListener('timeupdate', () => {
+      state.currentTime = currentPlaybackTime();
+      const now = Date.now();
+      if (now - lastTimelinePersistAt >= 1500) {
+        lastTimelinePersistAt = now;
+        schedulePersist(0);
+      }
+    });
+    els.copyLink?.addEventListener('click', () => copyHighlightValue(els.linkInput, 'Copied Highlight URL'));
+    els.copySource?.addEventListener('click', () => copyHighlightValue(els.sourceInput, 'Copied Highlight Setup'));
+    bc?.addEventListener('message', async (event) => {
+      const msg = event.data || {};
+      if (msg.type === 'highlight:screen-ready') {
+        await controlRestorePromise;
+        publishCurrentClip('screen-ready');
+      }
+      if (msg.type === 'highlight:progress') applySourceProgress(msg.payload || {});
+      if (msg.type === 'highlight:ended') advanceAfterEnded(msg.payload?.clipToken);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) schedulePersist(0);
+      else resumeHighlightControl();
+    });
+    window.addEventListener('focus', resumeHighlightControl);
     setupKeyboard();
   }
 
@@ -540,34 +767,88 @@
     requestAnimationFrame(() => runTransition(data.type, data.duration));
   }
 
+  function seekHighlightScreen(time) {
+    const video = els.screenVideo;
+    if (!video || !Number.isFinite(Number(time))) return;
+    const duration = Number.isFinite(video.duration) ? video.duration : Number(time);
+    const next = clamp(Number(time) || 0, 0, Math.max(0, duration || 0));
+    state.currentTime = next;
+    if (Math.abs((video.currentTime || 0) - next) < 0.01) return;
+    try { video.currentTime = next; } catch {}
+  }
+
+  function wakeHighlightScreen({ force = false, allowReload = false } = {}) {
+    const video = els.screenVideo;
+    if (!isHighlightScreen || !video || !(video.currentSrc || video.src)) return;
+    const now = Date.now();
+    if (!force && (document.hidden || now - lastScreenWakeAt < 2500)) return;
+    lastScreenWakeAt = now;
+    if (allowReload && video.readyState < 1 && video.networkState === 0) {
+      try { video.load(); } catch {}
+    }
+    video.playbackRate = state.speed;
+    seekHighlightScreen(state.currentTime);
+    if (state.playing) video.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
+    else video.pause();
+  }
+
+  function publishHighlightProgress(force = false) {
+    const video = els.screenVideo;
+    if (!isHighlightScreen || !video || !(video.currentSrc || video.src)) return;
+    const now = Date.now();
+    if (!force && now - lastProgressBroadcastAt < 700) return;
+    lastProgressBroadcastAt = now;
+    state.currentTime = video.currentTime || state.currentTime || 0;
+    post('highlight:progress', {
+      clipToken: state.clipToken,
+      currentTime: state.currentTime,
+      playing: !video.paused && !video.ended,
+      speed: video.playbackRate || state.speed
+    });
+  }
+
   async function loadScreenClipFromDB(payload = {}) {
     if (!isHighlightScreen || !els.screenVideo) return;
     try {
       const row = await getClip();
-      if (!row?.blob) return;
+      if (!row?.blob) {
+        setScreenStatus('Waiting for Highlight Control');
+        return;
+      }
 
       if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
       screenObjectUrl = URL.createObjectURL(row.blob);
 
       state.transition = payload.transition || row.transition || state.transition;
       state.transitionDuration = clamp(Number(payload.transitionDuration || row.transitionDuration) || state.transitionDuration, 0.5, 5);
+      state.speed = Number(payload.speed || row.speed) || 1;
+      state.playing = Boolean(payload.playing ?? row.playing);
+      state.currentTime = Math.max(0, Number(payload.currentTime ?? row.currentTime) || 0);
+      state.clipToken = payload.clipToken || row.clipToken || state.clipToken;
+      state.clipName = row.name || payload.clip?.name || 'clip';
 
-      prepareTransition(payload);
+      prepareTransition({ transition: state.transition, transitionDuration: state.transitionDuration });
 
       els.screenVideo.pause();
       els.screenVideo.src = screenObjectUrl;
       els.screenVideo.load();
-      els.screenVideo.playbackRate = Number(payload.speed || row.speed) || 1;
-      setScreenStatus(`Highlight: ${row.name || 'clip'}`);
+      els.screenVideo.playbackRate = state.speed;
+      setScreenStatus(`Highlight: ${state.clipName}`);
 
+      const applyPosition = () => seekHighlightScreen(state.currentTime);
       const reveal = () => {
+        applyPosition();
         startPendingTransition();
-        const shouldPlay = payload.playing ?? row.playing;
-        if (shouldPlay) {
-          els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
+        if (state.playing) {
+          els.screenVideo.play()
+            .then(() => setScreenStatus(`Highlight: ${state.clipName}`))
+            .catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
+        } else {
+          els.screenVideo.pause();
         }
       };
 
+      els.screenVideo.addEventListener('loadedmetadata', applyPosition, { once: true });
       els.screenVideo.addEventListener('loadeddata', reveal, { once: true });
       setTimeout(() => {
         if (els.screenVideo.readyState >= 2) {
@@ -581,10 +862,10 @@
   }
 
   function setupScreen() {
-    if (!isHighlightScreen || !bc) return;
+    if (!isHighlightScreen) return;
     initScreenTransitionOverlay();
     setScreenStatus('Highlight Source Ready');
-    loadScreenClipFromDB().catch((err) => {
+    const initialLoad = loadScreenClipFromDB().catch((err) => {
       console.warn('initial highlight clip load failed', err);
     });
 
@@ -601,8 +882,24 @@
       els.screenVideo.addEventListener('loadeddata', () => {
         startPendingTransition();
       });
+      els.screenVideo.addEventListener('timeupdate', () => {
+        state.currentTime = els.screenVideo.currentTime || 0;
+        publishHighlightProgress();
+      });
+      els.screenVideo.addEventListener('ended', () => {
+        state.currentTime = els.screenVideo.duration || state.currentTime;
+        publishHighlightProgress(true);
+        post('highlight:ended', { clipToken: state.clipToken, currentTime: state.currentTime });
+      });
     }
 
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) wakeHighlightScreen({ force: true, allowReload: true });
+    });
+    window.addEventListener('pageshow', () => wakeHighlightScreen({ force: true, allowReload: true }));
+    window.addEventListener('focus', () => wakeHighlightScreen({ force: true, allowReload: true }));
+
+    if (!bc) return;
     bc.addEventListener('message', async (event) => {
       const msg = event.data || {};
       if (!msg.type || msg.source === 'highlight-screen') return;
@@ -617,33 +914,52 @@
       }
       if (msg.type === 'highlight:play') {
         state.speed = Number(payload.speed) || state.speed;
+        state.playing = true;
+        if (Number.isFinite(Number(payload.currentTime))) seekHighlightScreen(payload.currentTime);
         if (els.screenVideo) {
           els.screenVideo.playbackRate = state.speed;
-          els.screenVideo.play().catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
+          els.screenVideo.play()
+            .then(() => setScreenStatus(`Highlight: ${state.clipName || 'clip'}`))
+            .catch(() => setScreenStatus('Click Highlight Source once to allow playback'));
         }
       }
       if (msg.type === 'highlight:pause') {
+        state.playing = false;
+        if (Number.isFinite(Number(payload.currentTime))) seekHighlightScreen(payload.currentTime);
         els.screenVideo?.pause();
+        publishHighlightProgress(true);
       }
       if (msg.type === 'highlight:restart' && els.screenVideo) {
         state.transition = payload.transition || state.transition;
         state.transitionDuration = clamp(Number(payload.transitionDuration) || state.transitionDuration, 0.5, 5);
         prepareTransition(payload);
-        els.screenVideo.currentTime = 0;
+        state.currentTime = 0;
+        state.playing = Boolean(payload.playing);
+        seekHighlightScreen(0);
         els.screenVideo.playbackRate = Number(payload.speed) || state.speed;
         startPendingTransition();
-        els.screenVideo.play().catch(() => {});
+        if (state.playing) els.screenVideo.play().catch(() => {});
+        else els.screenVideo.pause();
       }
       if (msg.type === 'highlight:speed') {
         state.speed = Number(payload.speed) || 1;
         if (els.screenVideo) els.screenVideo.playbackRate = state.speed;
       }
       if (msg.type === 'highlight:clear') {
+        state.playing = false;
+        state.currentTime = 0;
+        state.clipToken = '';
+        state.clipName = '';
         els.screenVideo?.pause();
         els.screenVideo?.removeAttribute('src');
+        els.screenVideo?.load();
+        if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
+        screenObjectUrl = null;
+        stopAnimations();
         setScreenStatus('Highlight cleared');
       }
     });
+    initialLoad.finally(() => post('highlight:screen-ready', { ready: true }));
   }
 
   setupControl();

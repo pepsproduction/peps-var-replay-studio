@@ -1,136 +1,104 @@
-# Peps VAR Replay Studio
+# PEPS VAR Replay Studio
 
-เว็บคอนโทรล VAR Replay สำหรับ OBS Browser Source / OBS Custom Browser Dock แบบ Static ใช้ลง GitHub Pages ได้ทันที
+เครื่องมือควบคุม VAR Replay และ Highlight Playlist สำหรับ OBS ทำงานเป็น Static Web App และเปิดผ่าน GitHub Pages ได้โดยไม่ต้องมี Backend
 
-> โปรเจกต์นี้เป็นงานสร้างใหม่สำหรับ PepsLive/Pepsproduction โดยออกแบบฟังก์ชันให้ใกล้กับแนวทาง VAR Replay Control Center แต่ไม่ได้คัดลอกซอร์สโค้ด, asset, QR, branding หรือไฟล์ของเว็บต้นฉบับ
+## โหมดใช้งาน
 
-## ฟีเจอร์หลัก
+- `?mode=control` ใช้เป็น OBS Custom Browser Dock สำหรับควบคุม VAR และ Highlight
+- `?mode=screen` ใช้เป็น OBS Browser Source สำหรับภาพ VAR
+- `?mode=highlight-screen` ใช้เป็น OBS Browser Source สำหรับ Highlight Playlist
 
-- เปิดเป็นหน้า Control Center ด้วย `?mode=control`
-- เปิดเป็นหน้า Screen สำหรับ OBS Browser Source ด้วย `?mode=screen`
-- คลิกหรือ Drag & Drop ไฟล์วิดีโอ
-- บันทึกคลิปล่าสุดไว้ใน IndexedDB ของ browser
-- Sync Control → Screen ด้วย BroadcastChannel
-- Play / Pause
-- Set A / Set B สำหรับ Loop A-B
-- Clear Loop
-- Timeline seek
-- Navigator สำหรับซูมช่วง Timeline โดยลากขอบซ้าย/ขวา
-- Speed 0.25x - 2.0x
-- Zoom 1.0x - 3.0x
-- Pan X/Y
-- Reset Zoom & Position
-- ปุ่ม Copy Screen Link / Control Link
-- Shortcut keyboard
-- Screen mode พื้นหลังโปร่งใส เหมาะกับ OBS Browser Source
+หน้า Control แบ่งขั้นตอนตามงานจริง:
 
-## วิธีใช้งานบน GitHub Pages
+1. เลือกหรือลากคลิป
+2. ตรวจดูเฟรมและลาก Timeline โดยภาพจะเลื่อนตามตำแหน่งที่ลาก
+3. ตั้งจุด A และ B สำหรับช่วง Replay
+4. ปรับ Zoom, Pan, Speed และ Output เฉพาะเมื่อต้องการ
 
-1. อัปโหลดไฟล์ทั้งหมดขึ้น repo เช่น `peps-var-replay-studio`
-2. เปิด GitHub Pages จาก branch `main` และ root folder
-3. เข้า URL หลัก เช่น
+## ตั้งค่า OBS
 
-```text
-https://YOURNAME.github.io/peps-var-replay-studio/index.html?mode=control
-```
+1. เปิด URL `index.html?mode=control` เป็น Custom Browser Dock
+2. กด `Sources` ที่ด้านล่างของ Dock
+3. Copy URL หรือ Copy Setup ของ Source ที่ต้องการ
+4. เพิ่ม `VAR Screen` และ `Highlight Screen` เป็น Browser Source ขนาด `1920x1080`
+5. เปิด `Keep source active when hidden` ให้ทั้งสอง Browser Source
 
-4. กด `Get Screen Link`
-5. Copy ลิงก์ Screen ไปใส่ใน OBS Browser Source
+แนะนำให้ใช้ Control Dock กว้าง `420-520` พิกเซล และสูงประมาณ `900` พิกเซล
 
-```text
-https://YOURNAME.github.io/peps-var-replay-studio/index.html?mode=screen
-```
+## VAR Replay
 
-## วิธีใช้กับ OBS ที่แนะนำ
+- รองรับ Click, Drag and Drop และการเลือกไฟล์เดิมซ้ำ
+- ตรวจสอบว่า Chromium decode เฟรมได้ก่อนเปลี่ยนคลิปที่กำลังใช้งาน
+- ถ้าคลิปใหม่ใช้ไม่ได้ ระบบจะเก็บคลิปเดิมไว้แทนการทำให้หน้าจอดำ
+- Timeline และ Marker A/B seek แบบตรงตำแหน่งขณะลาก
+- Screen ส่งเวลาการเล่นจริงกลับมาที่ Control เพื่อรักษาความลื่นเมื่อเปิดหลาย Dock
+- Double buffer ลดการกระพริบตอนโหลดหรือเปลี่ยนคลิป
+- มี Zoom preset `1x`, `2x`, `5x`, `10x` และลาก Pan ได้
 
-### แบบที่เสถียรสุด
+## Highlight Replay
 
-- เพิ่ม `index.html?mode=control` เป็น OBS Custom Browser Dock
-- เพิ่ม `index.html?mode=screen` เป็น OBS Browser Source
-- โหลดวิดีโอจากหน้า Control Dock
-- กด Play / Pause / Set A-B จากหน้า Control
+- เพิ่มหลายคลิปพร้อมกันและจัด Playlist ได้
+- เล่นตามลำดับหรือสุ่ม พร้อม Loop Playlist
+- รองรับ Speed และ Transition หลายรูปแบบ
+- จำคลิปและตำแหน่งล่าสุดด้วย IndexedDB
+- Highlight Screen ส่งสถานะการเล่นและเหตุการณ์จบคลิปกลับ Control
+- ถ้า Control Dock ถูกลดความสำคัญโดย Chromium, Source ยังสามารถสั่งเดิน Playlist ต่อได้
+- ปุ่ม Clear ล้างทั้ง Playlist, IndexedDB และ Source ที่กำลังเล่น
 
-การเปิดทั้ง Control และ Screen ใน OBS ช่วยให้ browser context มีโอกาสแชร์ IndexedDB/BroadcastChannel ได้ดีที่สุด
+## Codec ที่แนะนำ
 
-Performance note: if multiple Control Dock UIs are open, the dock used most recently becomes the active controller. Other control docks stay passive and do not send playback heartbeat, which helps keep Screen playback smooth.
+OBS Browser Source ใช้ Chromium ซึ่งอาจอ่าน metadata ของ `HEVC/H.265` ในไฟล์ MKV ได้ แต่ไม่สามารถ decode ภาพได้ ทำให้ดูเหมือนคลิปค้างหลังเริ่มเล่น
 
-### หมายเหตุสำคัญเรื่องไฟล์วิดีโอ
-
-OBS Browser Source / Chromium เล่นไฟล์บาง codec ไม่ได้ แม้ไฟล์จะเปิดใน VLC ได้ เช่น `HEVC/H.265` ใน `.mkv` อาจทำให้เวลาเดินแต่ภาพไม่ decode และดูเหมือนค้าง ให้ใช้ไฟล์ `H.264 MP4` สำหรับ VAR Replay
-
-แปลงคลิป OBS Replay เป็น H.264 MP4 ได้ด้วย:
+ใช้ `H.264 + AAC` ในไฟล์ MP4 เพื่อความเสถียร:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\convert-replay-to-h264.ps1 -InputPath "Replay 2026-05-23 09-43-35.mkv"
+powershell -ExecutionPolicy Bypass -File tools\convert-replay-to-h264.ps1 -InputPath "Replay.mkv"
 ```
 
-ไฟล์ที่ลากเข้า browser เป็นไฟล์ local ของเครื่อง ผู้ใช้ทั่วไปไม่สามารถส่งไฟล์ local จาก Chrome ไปยัง OBS Browser Source คนละ browser profile ได้โดยตรง เพราะติด sandbox/security ของ browser
+ไฟล์ผลลัพธ์จะมีชื่อ `Replay-h264.mp4` และใช้ `yuv420p` พร้อม `faststart`
 
-ดังนั้นหากเปิด Control ใน Chrome แต่เปิด Screen ใน OBS แล้ว Screen ไม่เห็นคลิป ให้ใช้วิธีนี้แทน:
+## Keyboard
 
-- เปิด Control เป็น OBS Custom Browser Dock
-- หรืออัปโหลดคลิปไปไว้บน URL สาธารณะแล้วปรับเพิ่ม `src=` ในโค้ดภายหลัง
+### VAR
 
-## Keyboard Shortcuts
-
-| ปุ่ม | การทำงาน |
+| ปุ่ม | คำสั่ง |
 |---|---|
-| Space | Play / Pause |
-| A | Set A |
-| B | Set B |
-| C | Clear Loop |
-| R | Reset Zoom & Position |
-| ← / → | Seek -1s / +1s |
-| [ / ] | ลด/เพิ่ม Speed |
-| + / - | เพิ่ม/ลด Zoom |
+| `Space` | Play / Pause |
+| `A` | ตั้งจุด A |
+| `B` | ตั้งจุด B |
+| `C` | ล้างช่วง A-B |
+| `R` | Reset Zoom และ Pan |
+| `Left` / `Right` | ย้อนหรือเดินหน้า 1 วินาที |
+| `[` / `]` | ลดหรือเพิ่ม Speed |
+| `+` / `-` | เพิ่มหรือลด Zoom |
 
-## โครงไฟล์
+### Highlight
 
-```text
-peps-var-replay-studio/
-├─ index.html
-├─ VAR_Replay_V1.0.html
-├─ assets/
-│  ├─ var-replay.css
-│  └─ var-replay.js
-├─ data/
-│  └─ sample-config.json
-├─ tools/
-│  └─ convert-replay-to-h264.ps1
-├─ ANALYSIS_AND_WORKFLOW.md
-├─ CHANGELOG.md
-└─ README.md
-```
+| ปุ่ม | คำสั่ง |
+|---|---|
+| `Space` | Play / Pause |
+| `R` | เริ่มคลิปปัจจุบันใหม่ |
+| `Left` / `Right` | คลิปก่อนหน้า / ถัดไป |
+| `[` / `]` | ลดหรือเพิ่ม Speed |
 
-## ปรับแบรนด์/สี
-
-แก้สีหลักได้ที่ไฟล์:
+## โครงสร้างหลัก
 
 ```text
-assets/var-replay.css
+index.html
+assets/
+  var-replay.css
+  var-replay.js
+  highlight-replay.js
+data/
+  sample-config.json
+tools/
+  convert-replay-to-h264.ps1
 ```
 
-ตัวแปรหลักอยู่ใน `:root`
+`VAR_Replay_V1.0.html` เก็บไว้เป็น Compatibility Redirect ไปยัง `index.html`
 
-```css
---orange: #ff8a1c;
---orange-2: #ffb347;
---blue: #62d6ff;
-```
+## หมายเหตุ
 
-## ข้อจำกัดเวอร์ชันนี้
-
-- ยังไม่ใช่ระบบจับ replay จาก live input แบบ capture card/NDI โดยตรง
-- เป็นระบบเล่นไฟล์วิดีโอ replay ที่ผู้ใช้โหลดเข้าไปเอง
-- Screen page จะ sync ได้ดีที่สุดเมื่อ Control และ Screen อยู่ใน browser context เดียวกัน เช่น OBS Custom Browser Dock + OBS Browser Source
-- ยังไม่มีระบบตัดคลิปอัตโนมัติจาก live stream buffer
-
-## แนวทางพัฒนาต่อ
-
-- เพิ่ม recording buffer จาก OBS/NDI/WebRTC
-- เพิ่มปุ่ม Instant Replay 5s / 10s / 15s
-- เพิ่ม transition VAR Checking / Decision / Goal / No Goal
-- เพิ่ม scoreboard overlay sync กับ PepsLive Dock UI
-- เพิ่ม preset สำหรับ Football / Futsal / Basketball
-- เพิ่ม hotkey ผ่าน OBS WebSocket
-- เพิ่มระบบ export replay highlight เป็นไฟล์ MP4
+- Control Dock และ Browser Source ควรเปิดอยู่ใน OBS เดียวกันเพื่อให้ IndexedDB และ BroadcastChannel ทำงานใน browser context เดียวกัน
+- ถ้าเปิด Control Dock หลายหน้าต่าง หน้าต่างที่ใช้งานล่าสุดจะเป็นตัวควบคุมหลัก
+- ระบบนี้เล่นไฟล์ Replay ที่ผู้ใช้เลือก ไม่ได้จับ Live Input หรือ OBS Replay Buffer โดยตรง
